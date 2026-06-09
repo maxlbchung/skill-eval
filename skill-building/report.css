@@ -1,0 +1,91 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; padding: 0; }
+
+/* Nav header */
+nav { position: sticky; top: 0; z-index: 10; background: #0f172a; border-bottom: 1px solid #1e293b; padding: 1.25rem 6rem; display: flex; align-items: center; justify-content: space-between; }
+.nav-title { font-size: 1.35rem; font-weight: 700; color: #e2e8f0; white-space: nowrap; }
+.nav-links { display: flex; gap: .5rem; }
+.nav-btn { background: transparent; color: #94a3b8; border: 1px solid transparent; border-radius: .5rem; padding: .6rem 1.5rem; cursor: pointer; font-size: 1.1rem; font-weight: 500; transition: all .15s; }
+.nav-btn:hover { background: #1e293b; color: #e2e8f0; }
+.nav-btn.active { background: #1e293b; color: #e2e8f0; border-color: #334155; }
+
+main { margin: 0 auto; padding: 2.5rem 6rem 3rem; }
+
+h2 { font-size: 1.8rem; font-weight: 700; margin-bottom: 1.5rem; }
+.subtitle { color: #94a3b8; font-size: 1rem; margin-bottom: 1.5rem; }
+
+/* Summary analysis */
+.analysis { background: #1e293b; border-left: 4px solid #3b82f6; border-radius: 0 .5rem .5rem 0; padding: 1.5rem 1.75rem; margin-bottom: 2.5rem; line-height: 1.7; color: #cbd5e1; font-size: 1.15rem; }
+.analysis p { margin-bottom: .5rem; }
+.analysis p:last-child { margin-bottom: 0; }
+.analysis ul { margin: .5rem 0 .5rem 1.5rem; }
+.analysis li { margin-bottom: .25rem; }
+.analysis strong { color: #e2e8f0; }
+.analysis h2, .analysis h3, .analysis h4, .analysis h5 { color: #e2e8f0; font-size: 1.15rem; font-weight: 600; margin: 1rem 0 .4rem; }
+.analysis h2 { font-size: 1.25rem; }
+.analysis h2:first-child, .analysis h3:first-child { margin-top: 0; }
+.analysis code { background: #334155; padding: .15rem .4rem; border-radius: .25rem; font-size: .95em; }
+.home-footer { margin-top: .5rem; }
+.home-footer .subtitle { margin-bottom: 0; }
+
+/* Summary cards */
+.cards { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 2.5rem; }
+.card { background: #1e293b; border-radius: .75rem; padding: 1.5rem 1.75rem; min-width: 180px; flex: 1; cursor: pointer; transition: background .15s, transform .1s; border: 1px solid transparent; }
+.card:hover { background: #273349; border-color: #334155; transform: translateY(-2px); }
+.card-label { font-size: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .5rem; text-decoration: underline; text-decoration-color: #475569; text-underline-offset: 3px; }
+.card-score { font-size: 2.5rem; font-weight: 700; }
+.card-meta { font-size: 1rem; color: #64748b; margin-top: .35rem; }
+
+/* Bar charts */
+.charts { display: flex; gap: 2rem; flex-wrap: wrap; margin-bottom: 2.5rem; }
+.chart-box { flex: 1; min-width: 280px; background: #1e293b; border-radius: .75rem; padding: 1.75rem; }
+.chart-title { font-size: 1.25rem; font-weight: 600; margin-bottom: .5rem; }
+.chart-legend { font-size: 1rem; color: #94a3b8; margin-bottom: 1.5rem; display: flex; align-items: center; gap: .4rem; }
+.legend-dot { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+.legend-skill { background: #22c55e; }
+.legend-control { background: #f59e0b; }
+.legend-spacer { width: 1rem; }
+.bar-group { margin-bottom: 1.5rem; }
+.bar-group:last-child { margin-bottom: 0; }
+.bar-model-label { font-size: 1rem; color: #94a3b8; margin-bottom: .5rem; text-transform: uppercase; letter-spacing: .04em; }
+.bar-row { display: flex; align-items: center; gap: .75rem; margin-bottom: 6px; }
+/* Bars live in a fixed-width track so their % widths share one scale. Sizing
+   the bar against .bar-row let flex shrink any overflowing bar to the same
+   leftover space, so e.g. 23/23 and 21/23 rendered identical lengths. */
+.bar-track { flex: 1; min-width: 0; }
+.bar { height: 32px; border-radius: 5px; min-width: 4px; transition: width .3s; }
+.bar-skill { background: #22c55e; }
+.bar-control { background: #f59e0b; }
+.bar-val { font-size: 1rem; color: #94a3b8; white-space: nowrap; min-width: 3.5rem; }
+
+/* Comparison table */
+table { width: 100%; border-collapse: collapse; font-size: 1.05rem; }
+th, td { padding: .75rem 1rem; text-align: center; border-bottom: 1px solid #1e293b; }
+th { background: #1e293b; color: #94a3b8; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+th.group { border-bottom: 2px solid #334155; font-size: 1.15rem; color: #e2e8f0; }
+.test-name { text-align: left; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cbd5e1; }
+tr:nth-child(even) { background: rgba(30, 41, 59, .5); }
+.pass { color: #22c55e; font-weight: 700; font-size: 1.2rem; }
+.fail { color: #ef4444; font-weight: 700; font-size: 1.2rem; }
+.skip { color: #64748b; font-weight: 700; font-size: 1.2rem; }
+.totals td, .totals .test-name { border-top: 2px solid #334155; padding-top: 1rem; }
+.meta-row td { color: #64748b; font-size: 1rem; }
+
+/* Instance page */
+.instance-selector { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 2rem; }
+.instance-btn { background: #1e293b; color: #94a3b8; border: 1px solid transparent; border-radius: .5rem; padding: .7rem 1.5rem; cursor: pointer; font-size: 1.05rem; font-weight: 500; transition: all .15s; }
+.instance-btn:hover { background: #273349; color: #e2e8f0; }
+.instance-btn.active { background: #273349; color: #e2e8f0; border-color: #475569; }
+.detail-stats { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 2rem; }
+.stat { background: #1e293b; border-radius: .75rem; padding: 1.25rem 1.5rem; min-width: 160px; flex: 1; }
+.stat-label { font-size: .95rem; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .35rem; }
+.stat-value { font-size: 1.75rem; font-weight: 600; }
+.stat-pct { font-size: 1.1rem; font-weight: 400; color: #94a3b8; }
+.detail-table th { text-align: left; font-size: 1.05rem; }
+
+/* stderr log */
+.log-heading { font-size: 1.1rem; font-weight: 600; margin-top: 2rem; margin-bottom: .75rem; color: #94a3b8; }
+.log-block { background: #1e293b; border: 1px solid #334155; border-radius: .5rem; padding: 1.25rem; font-family: "Cascadia Code", "Fira Code", "Consolas", monospace; font-size: .9rem; color: #cbd5e1; line-height: 1.6; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; }
+
+.page { display: none; }
+#home { display: block; }

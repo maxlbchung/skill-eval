@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Test Report</title>
+<style>{{STYLES}}</style>
+</head>
+<body>
+
+<nav id="nav">
+  <span class="nav-title" id="nav-title"></span>
+  <div class="nav-links">
+    <button class="nav-btn active" data-page="home">Home</button>
+    <button class="nav-btn" data-page="comparison">Comparison</button>
+    <button class="nav-btn" data-page="instance">Instance</button>
+    <button class="nav-btn" data-page="errors" id="nav-errors">Errors</button>
+  </div>
+</nav>
+
+<main>
+  <!-- Home -->
+  <div id="home" class="page">
+    <div id="summary-section">
+      <h2>Summary</h2>
+      <div class="analysis" id="analysis"></div>
+    </div>
+    <div class="charts" id="charts"></div>
+    <div class="home-footer">
+      <div class="subtitle" id="timestamp"></div>
+    </div>
+  </div>
+
+  <!-- Comparison -->
+  <div id="comparison" class="page">
+    <div class="cards" id="comparison-cards"></div>
+    <table id="comparison-table">
+      <thead id="comparison-head"></thead>
+      <tbody id="comparison-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Instance -->
+  <div id="instance" class="page">
+    <div class="instance-selector" id="instance-selector"></div>
+    <div id="instance-content"></div>
+  </div>
+
+  <!-- Errors -->
+  <div id="errors" class="page">
+    <div class="instance-selector" id="errors-selector"></div>
+    <div id="errors-content"></div>
+  </div>
+</main>
+
+<script id="report-data" type="application/json">{{REPORT_DATA}}</script>
+<script>{{SCRIPT}}</script>
+</body>
+</html>

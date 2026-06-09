@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Test Progress</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0f172a;
+  --panel: #1e293b;
+  --panel-2: #273349;
+  --line: #334155;
+  --line-soft: #1e293b;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --dim: #64748b;
+  --pass: #22c55e;
+  --fail: #ef4444;
+  --run: #3b82f6;
+  --wait: #f59e0b;
+  --skip: #a855f7;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+  padding: 1.25rem 6rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.nav-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.nav-meta { color: var(--muted); font-size: 1rem; text-align: right; }
+main { margin: 0 auto; padding: 2.5rem 6rem 3rem; }
+.status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--panel);
+  border-left: 4px solid var(--run);
+  border-radius: 0 8px 8px 0;
+  padding: 1.1rem 1.35rem;
+  margin-bottom: 2rem;
+}
+.status-strip strong { color: var(--text); }
+.status-strip span { color: var(--muted); margin-left: .5rem; }
+.source-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  padding: .35rem .65rem;
+  font-size: .9rem;
+  max-width: 52vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ring {
+  --pct: 0;
+  --ring-color: var(--dim);
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, var(--panel) 58%, transparent 59%),
+    conic-gradient(var(--ring-color) calc(var(--pct) * 1%), #334155 0);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: .92rem;
+  color: var(--text);
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: .75rem;
+  align-items: start;
+  padding-bottom: .5rem;
+}
+.run-column {
+  display: grid;
+  gap: .6rem;
+  min-width: 0;
+}
+.column-title {
+  color: var(--text);
+  font-size: .9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0 .1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.phase-card,
+.test-card {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  min-width: 0;
+}
+.build-card {
+  padding: .62rem .58rem;
+  min-height: 42px;
+}
+.build-card.running { border-color: rgba(59, 130, 246, .7); }
+.build-card.complete { border-color: rgba(34, 197, 94, .85); }
+.build-card.failed { border-color: rgba(239, 68, 68, .72); }
+.build-card.waiting { border-color: rgba(245, 158, 11, .55); }
+.build-line {
+  color: #cbd5e1;
+  font-size: .72rem;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.build-card.running .build-line { color: #bfdbfe; }
+.build-card.complete .build-line { color: #bbf7d0; }
+.build-card.failed .build-line { color: #fecaca; }
+.test-card {
+  padding: .7rem .55rem .55rem;
+}
+.test-progress-top {
+  display: grid;
+  justify-items: center;
+  gap: .45rem;
+  padding: .15rem 0 .9rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.test-count {
+  color: var(--muted);
+  font-size: .84rem;
+  font-weight: 700;
+}
+.test-details {
+  border-top: 1px solid var(--line-soft);
+  margin-top: .75rem;
+}
+.test-details summary {
+  align-items: center;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  font-size: .78rem;
+  font-weight: 700;
+  gap: .5rem;
+  justify-content: space-between;
+  list-style: none;
+  padding: .65rem .25rem .2rem;
+}
+.test-details summary::-webkit-details-marker { display: none; }
+.test-details summary::after {
+  color: var(--muted);
+  content: "+";
+  font-size: .95rem;
+  line-height: 1;
+}
+.test-details[open] summary::after { content: "-"; }
+.detail-count { color: var(--muted); }
+.test-list {
+  display: grid;
+  padding: .45rem .25rem .55rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.test-line {
+  color: #cbd5e1;
+  font-size: .78rem;
+  line-height: 1.35;
+  padding: .28rem 0;
+  border-bottom: 1px solid rgba(51, 65, 85, .42);
+  white-space: nowrap;
+  min-width: 0;
+}
+.test-line:last-child { border-bottom: 0; }
+.test-line.running { color: #bfdbfe; }
+.test-line.pass .test-status { color: var(--pass); }
+.test-line.fail .test-status { color: var(--fail); }
+.test-line.running .test-status { color: var(--run); }
+.test-line.skip .test-status { color: var(--skip); }
+.test-time { color: var(--muted); }
+.test-status { font-weight: 700; }
+.empty { color: var(--dim); font-size: .92rem; padding: .8rem; }
+.error-box { border-left-color: var(--fail); }
+.error-box strong { color: var(--fail); }
+@media (max-width: 980px) {
+  nav { padding: 1rem 1.25rem; align-items: flex-start; flex-direction: column; }
+  .nav-meta { text-align: left; }
+  main { padding: 1.25rem .75rem; }
+  .board { gap: .45rem; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .column-title { font-size: .68rem; }
+  .build-card { padding: .45rem .38rem; }
+  .build-line,
+  .test-line,
+  .test-details summary,
+  .test-count { font-size: .62rem; }
+  .ring { width: 46px; height: 46px; font-size: .72rem; }
+  .test-card { padding: .5rem .35rem .4rem; }
+  .status-strip { align-items: flex-start; flex-direction: column; }
+  .source-chip { max-width: 100%; }
+}
+</style>
+</head>
+<body>
+<nav>
+  <span class="nav-title">Skill Test Progress</span>
+  <div class="nav-meta" id="nav-meta">Waiting for results...</div>
+</nav>
+
+<main>
+  <section class="status-strip" id="status-strip">
+    <div>
+      <strong id="status-title">Loading live test data</strong>
+      <span id="status-detail">Polling the results file.</span>
+    </div>
+    <div class="source-chip" id="source-chip"></div>
+  </section>
+
+  <section class="board" id="board" aria-label="Run progress columns"></section>
+</main>
+
+<script>
+const DEFAULT_RESULTS_URL = "../runs/results.json";
+const POLL_MS = 1500;
+const TICK_MS = 1000;
+const params = new URLSearchParams(location.search);
+const source = params.get("results") || DEFAULT_RESULTS_URL;
+const testIdsSource = params.get("testIds");
+const singleRunId = params.get("runId") || "current-run";
+const singleRunLabel = params.get("label") || "Current Run";
+let testCatalogSeed = [];
+let loadedTestIds = false;
+let latestResults = null;
+let lastFetchTime = null;
+const runningTestTimers = new Map();
+document.getElementById("source-chip").textContent = source;
+
+function esc(value) {
+  const d = document.createElement("div");
+  d.textContent = value == null ? "" : String(value);
+  return d.innerHTML;
+}
+
+function labelForRun(id) {
+  if (id === singleRunId) return singleRunLabel;
+  const parts = id.split("-");
+  const condition = parts.at(-1);
+  const model = parts.at(-2) || id;
+  const modelLabel = model.charAt(0).toUpperCase() + model.slice(1);
+  return condition === "skill" ? `${modelLabel} + Skill` :
+    condition === "control" ? `${modelLabel} Control` : id;
+}
+
+function normalizeResultsPayload(data) {
+  if (Array.isArray(data)) {
+    return {
+      [singleRunId]: {
+        status: "complete",
+        tests: data,
+      },
+    };
+  }
+  if (Array.isArray(data?.tests)) {
+    return {
+      [singleRunId]: {
+        status: data.status || "complete",
+        ...data,
+      },
+    };
+  }
+  return data?.runs || data || {};
+}
+
+function runOrder(results) {
+  const keys = Object.keys(results);
+  const modelOrder = ["opus", "sonnet", "haiku"];
+  const condOrder = ["skill", "control"];
+  return keys.sort((a, b) => {
+    const ap = a.split("-");
+    const bp = b.split("-");
+    const am = modelOrder.indexOf(ap.at(-2));
+    const bm = modelOrder.indexOf(bp.at(-2));
+    const ac = condOrder.indexOf(ap.at(-1));
+    const bc = condOrder.indexOf(bp.at(-1));
+    return (am === -1 ? 99 : am) - (bm === -1 ? 99 : bm) ||
+      (ac === -1 ? 99 : ac) - (bc === -1 ? 99 : bc) ||
+      a.localeCompare(b);
+  });
+}
+
+function testCatalog(results) {
+  const byId = new Map(testCatalogSeed.map((test) => [test.id, test]));
+  for (const run of Object.values(results)) {
+    for (const test of run.tests || []) {
+      if (test.id !== undefined && test.name) byId.set(test.id, { id: test.id, name: test.name });
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.id - b.id);
+}
+
+async function loadTestIds() {
+  if (loadedTestIds || !testIdsSource) return;
+  loadedTestIds = true;
+  const response = await fetch(`${testIdsSource}${testIdsSource.includes("?") ? "&" : "?"}_=${Date.now()}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`testIds HTTP ${response.status}`);
+  const testIds = await response.json();
+  testCatalogSeed = Object.entries(testIds)
+    .map(([name, id]) => ({ id, name }))
+    .sort((a, b) => a.id - b.id);
+}
+
+function coerceTime(value) {
+  if (!value) return null;
+  const t = new Date(value).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+function durationMs(test) {
+  const direct = test.durationMs ?? test.timeMs ?? test.elapsedMs;
+  if (Number.isFinite(direct)) return direct;
+  const start = coerceTime(test.startedAt || test.startTime);
+  const end = coerceTime(test.endedAt || test.endTime);
+  if (start && end && end >= start) return end - start;
+  return null;
+}
+
+function fmtDuration(ms) {
+  if (!Number.isFinite(ms)) return "(X)";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const sec = ms / 1000;
+  if (sec < 60) return `${sec.toFixed(sec < 10 ? 1 : 0)}s`;
+  return `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s`;
+}
+
+function resultLabel(test) {
+  if (test.status === "running") return "RUNNING";
+  if (test.status === "skipped") return "SKIPPED";
+  if (test.result === true || test.status === "passed") return "PASS";
+  if (test.result === false || ["failed", "timedOut", "interrupted"].includes(test.status)) return "FAIL";
+  return "PENDING";
+}
+
+function resultClass(test) {
+  const label = resultLabel(test).toLowerCase();
+  if (label === "pass") return "pass";
+  if (label === "fail") return "fail";
+  if (label === "running") return "running";
+  if (label === "skipped") return "skip";
+  return "";
+}
+
+function resultText(test) {
+  const label = resultLabel(test);
+  if (label === "RUNNING") return "in progress";
+  return label.toLowerCase();
+}
+
+function normalizeTests(run) {
+  const byKey = new Map();
+  for (const test of run.tests || []) {
+    const key = test.id !== undefined ? `id:${test.id}` : `name:${test.name}`;
+    byKey.set(key, test);
+  }
+  return [...byKey.values()].sort((a, b) => (a.id ?? 9999) - (b.id ?? 9999));
+}
+
+function testKey(test) {
+  return test?.id !== undefined ? `id:${test.id}` : `name:${test?.name || ""}`;
+}
+
+function completedTests(run) {
+  return normalizeTests(run).filter((test) => {
+    const label = resultLabel(test);
+    return label === "PASS" || label === "FAIL" || label === "SKIPPED";
+  });
+}
+
+function statusForRun(run, catalog) {
+  const status = String(run.status || "").toLowerCase();
+  if (["running", "testing", "in-progress", "in_progress"].includes(status)) {
+    return { key: "running", label: "Running" };
+  }
+  if (["queued", "pending", "waiting"].includes(status)) return { key: "queued", label: "Queued" };
+  if (["failed", "error", "crashed"].includes(status)) return { key: "failed", label: "Failed" };
+  if (["complete", "completed", "done", "passed"].includes(status)) return { key: "complete", label: "Complete" };
+  const done = completedTests(run).length;
+  if (done === 0) return { key: "queued", label: "Waiting" };
+  if (done >= catalog.length) return { key: "complete", label: "Complete" };
+  return { key: "running", label: "Running" };
+}
+
+function explicitCurrent(run) {
+  const current = run.currentTest || run.runningTest;
+  if (!current) return null;
+  if (typeof current === "string") return { name: current, startedAt: run.currentTestStartedAt };
+  if (typeof current === "number") return { id: current, startedAt: run.currentTestStartedAt };
+  return current;
+}
+
+function currentTest(run, catalog) {
+  const explicit = explicitCurrent(run);
+  if (explicit) {
+    const match = explicit.id !== undefined ? catalog.find((test) => test.id === explicit.id) : null;
+    return { ...match, ...explicit };
+  }
+  const running = normalizeTests(run).find((test) => resultLabel(test) === "RUNNING");
+  if (running) return running;
+  const buildHint = String(
+    run.skillRun?.status ||
+    run.build?.status ||
+    run.phases?.skill?.status ||
+    run.phases?.build?.status ||
+    run.skillStatus ||
+    run.buildStatus ||
+    run.phase ||
+    ""
+  ).toLowerCase();
+  if (["running", "building", "generating", "in-progress", "in_progress"].includes(buildHint) && normalizeTests(run).length === 0) {
+    return null;
+  }
+  const testingHint = String(
+    run.testRun?.status ||
+    run.testsRun?.status ||
+    run.testsPhase?.status ||
+    run.testing?.status ||
+    run.playwright?.status ||
+    run.phases?.tests?.status ||
+    run.phases?.testing?.status ||
+    run.testsStatus ||
+    run.testStatus ||
+    run.playwrightStatus ||
+    ""
+  ).toLowerCase();
+  const done = new Set(completedTests(run).map((test) => test.id));
+  if (["running", "testing", "in-progress", "in_progress"].includes(testingHint) ||
+      (normalizeTests(run).length > 0 && statusForRun(run, catalog).key === "running")) {
+    return catalog.find((test) => !done.has(test.id)) || null;
+  }
+  return null;
+}
+
+function runningTimerKey(runId, test) {
+  return `${runId}:${testKey(test)}`;
+}
+
+function runningElapsed(runId, run, test) {
+  const start = coerceTime(test?.startedAt || test?.startTime || run.currentTestStartedAt);
+  if (start) return Date.now() - start;
+  const updatedAt = coerceTime(test?.updatedAt || run.updatedAt);
+  const direct = numberValue(test?.durationMs, test?.timeMs, test?.elapsedMs);
+  if (direct !== null && updatedAt) return direct + Math.max(0, Date.now() - updatedAt);
+
+  const key = runningTimerKey(runId, test);
+  const now = Date.now();
+  const existing = runningTestTimers.get(key);
+  if (existing && existing.baseMs === (direct ?? 0)) return existing.baseMs + (now - existing.seenAt);
+
+  const baseMs = direct ?? 0;
+  runningTestTimers.set(key, { baseMs, seenAt: now });
+  return baseMs;
+}
+
+function firstValue(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function numberValue(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function phaseSource(run, keys) {
+  for (const key of keys) {
+    const value = run.phases?.[key] || run[key];
+    if (value && typeof value === "object") return value;
+  }
+  return {};
+}
+
+function normalizedPhaseStatus(value) {
+  const status = String(value || "").toLowerCase();
+  if (["running", "testing", "building", "generating", "in-progress", "in_progress", "started"].includes(status)) return "running";
+  if (["queued", "pending", "waiting", "not-started", "not_started"].includes(status)) return "waiting";
+  if (["failed", "error", "crashed", "timedout", "timed-out", "timed_out"].includes(status)) return "failed";
+  if (["complete", "completed", "done", "passed", "finished"].includes(status)) return "complete";
+  return "";
+}
+
+function phaseDuration(fields, status) {
+  const direct = numberValue(fields.durationMs, fields.elapsedMs, fields.timeMs, fields.duration_ms, fields.elapsed_ms);
+  if (direct !== null) return direct;
+  const start = coerceTime(firstValue(fields.startedAt, fields.startTime, fields.start, fields.started));
+  const end = coerceTime(firstValue(fields.endedAt, fields.endTime, fields.end, fields.ended, fields.completedAt));
+  if (start && end && end >= start) return end - start;
+  if (status === "running" && start) return Date.now() - start;
+  return null;
+}
+
+function skillPhaseForRun(run, catalog) {
+  const source = phaseSource(run, ["skillRun", "skill", "build", "generation", "phase1"]);
+  const fields = {
+    ...source,
+    status: firstValue(source.status, source.state, run.skillStatus, run.buildStatus, run.generationStatus),
+    startedAt: firstValue(
+      source.startedAt,
+      source.startTime,
+      source.start,
+      run.skillStartedAt,
+      run.buildStartedAt,
+      run.generationStartedAt,
+      run.phase1StartedAt
+    ),
+    endedAt: firstValue(
+      source.endedAt,
+      source.endTime,
+      source.end,
+      source.completedAt,
+      run.skillEndedAt,
+      run.buildEndedAt,
+      run.generationEndedAt,
+      run.buildCompletedAt,
+      run.phase1EndedAt
+    ),
+    durationMs: firstValue(
+      source.durationMs,
+      source.elapsedMs,
+      source.timeMs,
+      source.duration_ms,
+      run.skillDurationMs,
+      run.buildDurationMs,
+      run.generationDurationMs,
+      run.phase1DurationMs
+    ),
+  };
+  let status = normalizedPhaseStatus(fields.status);
+  const runStatus = normalizedPhaseStatus(run.status);
+  const testsStarted = normalizeTests(run).length > 0 || Boolean(currentTest(run, catalog));
+  if (!status && ["building", "generating"].includes(String(run.status || "").toLowerCase())) status = "running";
+  if (!status && (fields.endedAt || fields.durationMs || testsStarted)) status = "complete";
+  if (!status && (runStatus === "running" || run.steps || run.tokens) && !testsStarted) status = "running";
+  if (!status) status = "waiting";
+  return {
+    label: "Skill run",
+    status,
+    elapsedMs: phaseDuration(fields, status),
+  };
+}
+
+function testsPhaseForRun(run, catalog, done, total) {
+  const source = phaseSource(run, ["testRun", "testsRun", "testsPhase", "tests", "testing", "playwright", "phase2"]);
+  const current = currentTest(run, catalog);
+  const fields = {
+    ...source,
+    status: firstValue(source.status, source.state, run.testsStatus, run.testStatus, run.playwrightStatus),
+    startedAt: firstValue(
+      source.startedAt,
+      source.startTime,
+      source.start,
+      run.testsStartedAt,
+      run.testStartedAt,
+      run.testingStartedAt,
+      run.playwrightStartedAt,
+      run.phase2StartedAt,
+      run.startedAt
+    ),
+    endedAt: firstValue(
+      source.endedAt,
+      source.endTime,
+      source.end,
+      source.completedAt,
+      run.testsEndedAt,
+      run.testEndedAt,
+      run.testingEndedAt,
+      run.playwrightEndedAt,
+      run.phase2EndedAt,
+      run.endedAt
+    ),
+    durationMs: firstValue(
+      source.durationMs,
+      source.elapsedMs,
+      source.timeMs,
+      source.duration_ms,
+      run.testsDurationMs,
+      run.testDurationMs,
+      run.playwrightDurationMs,
+      run.phase2DurationMs
+    ),
+  };
+  let status = normalizedPhaseStatus(fields.status);
+  const runStatus = normalizedPhaseStatus(run.status);
+  if (!status && current) status = "running";
+  if (!status && done > 0 && done < total) status = "running";
+  if (!status && done > 0 && done >= total) status = "complete";
+  if (!status && runStatus === "running" && (fields.startedAt || done > 0)) status = "running";
+  if (!status && runStatus === "failed") status = "failed";
+  if (!status) status = "waiting";
+  return {
+    label: "Tests",
+    status,
+    elapsedMs: phaseDuration(fields, status),
+    progress: `${done}/${total}`,
+  };
+}
+
+function ringColor(status) {
+  const key = typeof status === "string" ? status : status.key;
+  if (key === "complete") return "var(--pass)";
+  if (key === "failed") return "var(--fail)";
+  if (key === "running") return "var(--run)";
+  return "var(--wait)";
+}
+
+function formatTokens(n) {
+  if (n === undefined || n === null || n === "") return "(X)";
+  const value = Number(n);
+  if (!Number.isFinite(value)) return "(X)";
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value);
+}
+
+function formatSteps(n) {
+  if (n === undefined || n === null || n === "") return "(X)";
+  const value = Number(n);
+  return Number.isFinite(value) ? String(value) : "(X)";
+}
+
+function buildLine(run, phase) {
+  const verb =
+    phase.status === "complete" ? "built" :
+    phase.status === "failed" ? "build failed" :
+    phase.status === "waiting" ? "waiting..." : "building...";
+  return `${verb} ${fmtDuration(phase.elapsedMs)} - ${formatTokens(run.tokens)} tokens - ${formatSteps(run.steps)} steps`;
+}
+
+function shouldShowTests(skillPhase, testsPhase, runTests) {
+  return skillPhase.status === "complete" ||
+    testsPhase.status === "running" ||
+    testsPhase.status === "complete" ||
+    testsPhase.status === "failed" ||
+    runTests.length > 0;
+}
+
+function displayTestId(test, index) {
+  const id = Number(test.id);
+  return Number.isFinite(id) ? id : index + 1;
+}
+
+function visibleTests(tests) {
+  return tests.filter((test) => resultLabel(test) !== "PENDING");
+}
+
+function render(results) {
+  const catalog = testCatalog(results);
+  const ids = runOrder(results);
+  const board = document.getElementById("board");
+  const openRuns = new Set(
+    [...board.querySelectorAll(".test-details[open]")]
+      .map((details) => details.closest(".run-column")?.dataset.run)
+      .filter(Boolean)
+  );
+  board.innerHTML = "";
+
+  let aggregateDone = 0;
+  let aggregateTotal = 0;
+  let activeCount = 0;
+  let skillRunningCount = 0;
+  let testRunningCount = 0;
+  const activeTimerKeys = new Set();
+
+  for (const id of ids) {
+    const run = results[id] || {};
+    const status = statusForRun(run, catalog);
+    const done = completedTests(run).length;
+    const total = run.totalTests || catalog.length || Math.max(done, 1);
+    const pct = Math.round((done / total) * 100);
+    const current = currentTest(run, catalog);
+    const skillPhase = skillPhaseForRun(run, catalog);
+    const testsPhase = testsPhaseForRun(run, catalog, done, total);
+    aggregateDone += done;
+    aggregateTotal += total;
+    if (status.key === "running" || skillPhase.status === "running" || testsPhase.status === "running") activeCount++;
+    if (skillPhase.status === "running") skillRunningCount++;
+    if (testsPhase.status === "running") testRunningCount++;
+
+    let runTests = normalizeTests(run);
+    if (current) {
+      const key = testKey(current);
+      let currentFound = false;
+      runTests = runTests.map((test) => {
+        if (testKey(test) !== key) return test;
+        currentFound = true;
+        return { ...test, ...current, status: "running" };
+      });
+      if (!currentFound) runTests.push({ ...current, status: "running" });
+      runTests.sort((a, b) => (a.id ?? 9999) - (b.id ?? 9999));
+    }
+    const shownTests = visibleTests(runTests);
+    const listHtml = shownTests.length
+      ? shownTests.map((test, index) => {
+          const cls = resultClass(test);
+          const isRunning = resultLabel(test) === "RUNNING";
+          if (isRunning) activeTimerKeys.add(runningTimerKey(id, test));
+          const ms = isRunning ? runningElapsed(id, run, test) : durationMs(test);
+          const timeText = fmtDuration(ms);
+          return `
+            <div class="test-line ${cls}" title="${esc(test.name || "")}">
+              <span class="test-name">${esc(displayTestId(test, index))}.</span>
+              <span class="test-time"> - ${esc(timeText)}</span>
+              <span> - </span><span class="test-status">${esc(resultText(test))}</span>
+            </div>
+          `;
+        }).join("")
+      : `<div class="empty">No tests recorded yet.</div>`;
+    const showTests = shouldShowTests(skillPhase, testsPhase, runTests);
+    const testsHtml = showTests ? `
+      <section class="test-card">
+        <div class="test-progress-top">
+          <div class="ring" style="--pct:${pct}; --ring-color:${ringColor(testsPhase.status)}">${pct}%</div>
+          <div class="test-count">${done}/${total}</div>
+        </div>
+        <details class="test-details" ${openRuns.has(id) ? "open" : ""}>
+          <summary><span>Tests</span><span class="detail-count">${shownTests.length}</span></summary>
+          <div class="test-list">${listHtml}</div>
+        </details>
+      </section>
+    ` : "";
+
+    board.insertAdjacentHTML("beforeend", `
+      <section class="run-column" data-run="${esc(id)}">
+        <div class="column-title">${esc(labelForRun(id))}</div>
+        <section class="phase-card build-card ${skillPhase.status}">
+          <div class="build-line">${esc(buildLine(run, skillPhase))}</div>
+        </section>
+        ${testsHtml}
+      </section>
+    `);
+  }
+
+  for (const key of runningTestTimers.keys()) {
+    if (!activeTimerKeys.has(key)) runningTestTimers.delete(key);
+  }
+
+  const refreshTime = lastFetchTime || new Date();
+  document.getElementById("nav-meta").textContent = `Last refresh ${refreshTime.toLocaleTimeString()}`;
+  document.getElementById("status-strip").classList.remove("error-box");
+  document.getElementById("status-title").textContent =
+    activeCount ? `${activeCount} instance${activeCount === 1 ? "" : "s"} active` : "No active instances reported";
+  document.getElementById("status-detail").textContent =
+    `${skillRunningCount} skill run${skillRunningCount === 1 ? "" : "s"} and ${testRunningCount} test run${testRunningCount === 1 ? "" : "s"} active. ${aggregateDone}/${aggregateTotal || 0} tests have reported results.`;
+}
+
+async function refresh() {
+  try {
+    await loadTestIds();
+    const url = `${source}${source.includes("?") ? "&" : "?"}_=${Date.now()}`;
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    latestResults = normalizeResultsPayload(data);
+    lastFetchTime = new Date();
+    render(latestResults);
+  } catch (error) {
+    const strip = document.getElementById("status-strip");
+    strip.classList.add("error-box");
+    document.getElementById("status-title").textContent = "Could not read live JSON";
+    document.getElementById("status-detail").textContent =
+      `${error.message}. Serve this page over HTTP so it can poll ${source}.`;
+  }
+}
+
+refresh();
+setInterval(refresh, POLL_MS);
+setInterval(() => {
+  if (latestResults) render(latestResults);
+}, TICK_MS);
+</script>
+</body>
+</html>

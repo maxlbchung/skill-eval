@@ -1,0 +1,28 @@
+{
+  "matrix": {
+    "models": [
+      "claude-opus-4-8",
+      "claude-sonnet-4-6",
+      "claude-haiku-4-5-20251001"
+    ],
+    "conditions": ["skill", "control"],
+    "replicates": 5
+  },
+  "pricing": {
+    "weights": {
+      "input": 1.0,
+      "cacheCreation": 1.25,
+      "cacheRead": 0.1,
+      "output": 5.0
+    },
+    "inputPerMTok": {
+      "claude-opus-4-8": 15.0,
+      "claude-sonnet-4-6": 3.0,
+      "claude-haiku-4-5-20251001": 1.0
+    }
+  },
+  "maxTurns": 50,
+  "concurrency": 6,
+  "port": 5210,
+  "schemaVersion": 1
+}

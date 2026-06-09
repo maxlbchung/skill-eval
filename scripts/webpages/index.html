@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Skill Eval</title>
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<nav>
+  <div class="nav-left">
+    <span class="nav-title">Skill Eval</span>
+    <div id="skill-picker" class="skill-picker" title="filter views by skill"></div>
+  </div>
+  <div class="nav-links">
+    <button class="nav-btn" data-tab="live">Live</button>
+    <button class="nav-btn" data-tab="instance">Instance</button>
+    <button class="nav-btn" data-tab="history">History</button>
+  </div>
+  <div class="nav-meta" id="nav-meta"></div>
+</nav>
+
+<main>
+  <section class="page" id="live">
+    <h2>Live</h2>
+    <div class="subtitle">Real-time build &amp; test progress for the running session (server memory; never persisted).</div>
+    <div class="status-strip idle" id="live-strip">
+      <div><strong id="live-title">No active session</strong><span id="live-detail"></span></div>
+    </div>
+    <div id="live-board"></div>
+  </section>
+
+  <section class="page" id="instance">
+    <h2>Instance</h2>
+    <div class="subtitle">A single session end to end: the skill-vs-control summary, then the per-test breakdown behind it.</div>
+    <div id="instance-banner"></div>
+
+    <h3 class="section-head">Comparison</h3>
+    <div class="subtitle" id="comparison-sub">skill vs control — mean score across replicates, with cost &amp; steps.</div>
+    <div id="comparison-body"><div class="empty">Loading…</div></div>
+
+    <h3 class="section-head">Per-test scores</h3>
+    <div class="subtitle">Every test × every (model, condition) cell (mean across replicates).</div>
+    <div id="instance-body"><div class="empty">Loading…</div></div>
+
+    <h3 class="section-head">Metric scatter</h3>
+    <div class="subtitle">Each point is one run (model × condition × replicate). Pick a metric for each axis on the right.</div>
+    <div id="scatter-body"><div class="empty">Loading…</div></div>
+
+    <h3 class="section-head">Error logs</h3>
+    <div class="subtitle">Runs that failed to build or score, with the log files read from each cell on disk.</div>
+    <div id="errorlog-body"><div class="empty">Loading…</div></div>
+  </section>
+
+  <section class="page" id="history">
+    <div id="history-body"></div>
+  </section>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
