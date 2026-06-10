@@ -8,6 +8,8 @@ import path from "node:path";
 import { parseCellDir, SESSIONS_DIR } from "./config.js";
 import { parseStreamMetrics } from "./stream-metrics.js";
 import { validateResultJson } from "./eval-runner.js";
+import { hashEvalDir } from "./session.js";
+import { findEvalDoc, parseEvalMd } from "./prompts.js";
 
 export async function reindexSession(db, sessionDir, sessionId) {
   const cellsDir = path.join(sessionDir, "cells");
@@ -52,6 +54,22 @@ export async function reindexSession(db, sessionDir, sessionId) {
     }
     n++;
   }
+
+  // Backfill eval_hash from the eval/ snapshot when it's missing (files-are-truth recovery).
+  // Only fill a NULL — never overwrite — because a --prompt override folds extra bytes into the
+  // stored hash that the folder alone can't reproduce.
+  try {
+    const session = db.getSession(sessionId);
+    const evalSnap = path.join(sessionDir, "eval");
+    if (session && session.eval_hash == null && fs.existsSync(evalSnap)) {
+      const evalMd = findEvalDoc(evalSnap);
+      const required = evalMd ? parseEvalMd(evalMd).required || [] : [];
+      db.updateSessionEvalHash(sessionId, hashEvalDir(evalSnap, new Set(required)));
+    }
+  } catch {
+    /* best effort — eval_hash backfill is optional */
+  }
+
   return { cells: n };
 }
 

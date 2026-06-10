@@ -131,9 +131,10 @@ function buildTaskBlock(evalDir, spec) {
   return out.join("");
 }
 
-// Returns { skill, control } prompt texts.
-export function assemblePrompts({ skillDir, evalSpec, promptOverride }) {
-  const evalDir = path.join(skillDir, "eval");
+// Returns { skill, control } prompt texts. `skillDir` and `evalDir` are passed explicitly so
+// the caller can point them at the immutable per-session snapshots (skill/ and eval/) rather
+// than the live source — guaranteeing the kept prompts can't drift from what actually graded.
+export function assemblePrompts({ skillDir, evalDir, evalSpec, promptOverride }) {
   const spec = promptOverride ? { ...evalSpec, prompt: promptOverride } : evalSpec;
   const task = buildTaskBlock(evalDir, spec);
 

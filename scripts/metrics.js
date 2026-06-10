@@ -68,13 +68,50 @@ export function sessionRollup(db, cfg, sessionId) {
     });
   }
 
+  // Baseline fill (Issue 3): for any model that ran SKILL this session but has NO control cell
+  // (control was reused, not re-measured), synthesize the control side from the cached regime
+  // baseline so the comparison reads skill(this session) vs control(baseline). The synthesized
+  // cell is tagged `fromBaseline` (with epoch/n) so the UI can badge its provenance, and the
+  // baseline's raw rows are merged in so the per-test grid + scatter show the control column.
+  const present = new Map(); // model -> Set(conditions actually run this session)
+  for (const c of cells) {
+    if (!present.has(c.model)) present.set(c.model, new Set());
+    present.get(c.model).add(c.condition);
+  }
+  const baselineCellRows = [];
+  const baselineTestRows = [];
+  for (const [model, conds] of present) {
+    if (!conds.has("skill") || conds.has("control")) continue; // only skill-only models
+    const base = db.regimeBaseline(session.eval_hash, model, { excludeSessionId: sessionId });
+    if (!base) continue;
+    const bcells = base.cells;
+    const bAllInteger = base.tests.length > 0 && base.tests.every((t) => Number.isInteger(t.score));
+    cells.push({
+      model,
+      condition: "control",
+      replicates: bcells.length,
+      failed: 0,
+      score: stats(bcells.map(cellMeanScore)),
+      passMean: stats(bcells.map((r) => (r.total > 0 ? r.score_sum : null))).mean,
+      total: Math.max(0, ...bcells.map((r) => r.total || 0)),
+      cost: stats(bcells.map((r) => cellCost(r, cfg))),
+      effort: stats(bcells.map(cellEffort)),
+      steps: stats(bcells.map((r) => r.steps)),
+      allInteger: bAllInteger,
+      fromBaseline: true,
+      baseline: { sessionId: base.sessionId, epoch: base.epochStart, n: bcells.length },
+    });
+    baselineCellRows.push(...bcells);
+    baselineTestRows.push(...base.tests);
+  }
+
   return {
     session,
     models: cfg.matrix.models,
     conditions: cfg.matrix.conditions,
     cells,
-    cellMetrics: rows,
-    testResults: tests,
+    cellMetrics: rows.concat(baselineCellRows),
+    testResults: tests.concat(baselineTestRows),
   };
 }
 

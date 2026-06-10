@@ -7,7 +7,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { loadConfig, DB_PATH, DEFAULT_CONFIG_PATH } from "./config.js";
+import http from "node:http";
+import { loadConfig, withOverrides, baselineMaxAgeIso, DB_PATH, DEFAULT_CONFIG_PATH } from "./config.js";
 import { openDb } from "./db.js";
 import { prepareSession } from "./session.js";
 import { runBuilds } from "./builds.js";
@@ -24,7 +25,9 @@ const has = (name) => argv.includes(name);
 
 const skillDir = flag("--skill-dir");
 if (!skillDir) {
-  console.error("Usage: node scripts/run.js --skill-dir <dir> [--config config.json] [--prompt ...] [--prompt-file ...] [--no-serve] [--keep]");
+  console.error(
+    "Usage: node scripts/run.js --skill-dir <dir> [--config config.json] [--replicates N] [--full-matrix] [--prompt ...] [--prompt-file ...] [--no-serve] [--keep]"
+  );
   process.exit(1);
 }
 const configPath = flag("--config", DEFAULT_CONFIG_PATH);
@@ -32,8 +35,16 @@ const promptOverride =
   flag("--prompt") ?? (flag("--prompt-file") ? fs.readFileSync(flag("--prompt-file"), "utf-8") : null);
 const serve = !has("--no-serve");
 const keep = has("--keep");
+const fullMatrix = has("--full-matrix"); // opt out of baseline reuse: force the full paired matrix
+const replicatesArg = flag("--replicates") != null ? Number(flag("--replicates")) : null;
 
-const cfg = loadConfig(configPath);
+let cfg = loadConfig(configPath);
+try {
+  cfg = withOverrides(cfg, { replicates: replicatesArg }); // --replicates overrides matrix.replicates
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}
 const db = openDb(DB_PATH);
 
 // Recover any session a previous orchestrator left 'running' after a crash.
@@ -41,33 +52,44 @@ const recovered = await reconcileAbandoned(db);
 if (recovered.length) console.log(`▶ recovered ${recovered.length} abandoned session(s): ${recovered.join(", ")}`);
 
 console.log(`▶ preparing session for ${skillDir}`);
-const session = prepareSession(db, cfg, skillDir, { promptOverride });
+const session = prepareSession(db, cfg, skillDir, {
+  promptOverride,
+  fullMatrix,
+  baselineMaxAgeIso: baselineMaxAgeIso(cfg),
+});
 console.log(
-  `  ${session.id}  —  ${session.cells.length} cells ` +
-    `(${cfg.matrix.models.length} models × ${cfg.matrix.conditions.length} conditions × ${cfg.matrix.replicates} replicates)`
+  `  ${session.id}  —  ${session.cells.length} cells  ` +
+    `(eval_hash ${session.evalHash.slice(0, 8)}, ${cfg.matrix.replicates} replicates)`
 );
+announceBaseline(session, cfg);
 
-// Optional live server + hooks (server.js, Step 4). Falls back to no-op hooks if absent.
-let live = {};
+// Live server. Live state is now derived from files (stream.jsonl + DB), so ONE server shows every
+// concurrent run — reuse an instance already listening on cfg.port instead of starting a second.
+// Only start one if none answers; if we start it, it stays up after the run (Ctrl-C to stop).
 let server = null;
 let port = cfg.port;
+let reusedServer = false;
 if (serve) {
-  try {
-    const mod = await import("./server.js");
-    const started = await mod.startSession?.(db, session, cfg);
-    if (started) ({ live, server, port } = started);
-    if (server) console.log(`  live: http://localhost:${port}${port !== cfg.port ? `  (config port ${cfg.port} was busy)` : ""}`);
-  } catch (err) {
-    console.warn(`  (live server not started: ${err.message})`);
+  reusedServer = await probeHealth(cfg.port);
+  if (reusedServer) {
+    console.log(`  live: http://localhost:${port}  (reusing the running server)`);
+  } else {
+    try {
+      const mod = await import("./server.js");
+      ({ server, port } = await mod.startServer(db, cfg));
+      console.log(`  live: http://localhost:${port}${port !== cfg.port ? `  (config port ${cfg.port} was busy)` : ""}`);
+    } catch (err) {
+      console.warn(`  (live server not started: ${err.message})`);
+    }
   }
 }
 
 console.log(`▶ building (concurrency ${cfg.concurrency})`);
-const builds = await runBuilds(db, session, cfg, live);
+const builds = await runBuilds(db, session, cfg);
 console.log(`  built ${builds.filter((b) => b.status === "pending").length}/${builds.length}`);
 
 console.log(`▶ testing`);
-const tests = await runTests(db, session, cfg, builds, live);
+const tests = await runTests(db, session, cfg, builds);
 console.log(`  scored ${tests.filter((t) => t.status === "complete").length}/${tests.length}`);
 
 // finalize → reindex (safety) → retention
@@ -78,16 +100,57 @@ try {
 } catch (err) {
   console.warn(`  reindex skipped: ${err.message}`);
 }
-live.onSessionEnd?.();
 if (!keep) retainSession(db, session);
 fs.rmSync(path.join(session.sessionDir, ".pid"), { force: true }); // settled — no longer abandonable
+// the .pid is gone now, so liveSessions() stops listing this run the instant it finalizes
 
 printSummary(db, session);
 
 if (serve && server) {
   console.log(`\n✓ done — report at http://localhost:${port}  (Ctrl-C to stop the server)`);
 } else {
+  if (serve && reusedServer) console.log(`\n✓ done — report at http://localhost:${port}  (served by the running instance)`);
   db.close();
+}
+
+// Probe an already-running skill-eval server on `port`. Resolves true only if /api/health answers
+// 200 with our marker, so we never collide with an unrelated service on the same port.
+function probeHealth(port, timeoutMs = 400) {
+  return new Promise((resolve) => {
+    const req = http.get({ host: "localhost", port, path: "/api/health", timeout: timeoutMs }, (res) => {
+      let body = "";
+      res.on("data", (d) => (body += d));
+      res.on("end", () => {
+        try {
+          resolve(res.statusCode === 200 && JSON.parse(body)?.service === "skill-eval");
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+  });
+}
+
+// Issue 4 "inform, don't ask": report the baseline posture the harness chose. A regime change
+// (new eval_hash) re-baselines automatically and is ANNOUNCED — it is mandatory for comparability,
+// not a user decision. Reused vs freshly-measured control is reported per model so a mixed session
+// reads correctly. The day-boundary refresh decision is the agent's (SKILL.md), not run.js's.
+function announceBaseline(session, cfg) {
+  const r = session.reuse;
+  if (r.regimeChanged) {
+    console.log(
+      `  ⚠ regime change — the eval/ tests changed ` +
+        `(eval_hash ${session.evalHash.slice(0, 8)} ≠ previous ${String(r.prevEvalHash).slice(0, 8)}).`
+    );
+    console.log(`    Measuring a fresh control baseline this session; older results are a different regime and won't be pooled.`);
+  }
+  const reused = r.reuseModels;
+  const fresh = cfg.matrix.models.filter((m) => !reused.includes(m));
+  if (r.fullMatrix && !r.regimeChanged) console.log(`  ● --full-matrix: measuring control for all models (no reuse).`);
+  if (reused.length) console.log(`  ↺ reusing cached control baseline (skill cells only) for: ${reused.join(", ")}`);
+  if (fresh.length && (reused.length || r.fullMatrix)) console.log(`  ● measuring control (full matrix) for: ${fresh.join(", ")}`);
 }
 
 function printSummary(db, session) {

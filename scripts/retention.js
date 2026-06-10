@@ -30,7 +30,22 @@ export function retainSession(db, session) {
     }
   }
 
+  // The eval/ snapshot is always-keep (it backs eval_hash + reproducibility). Strip only the
+  // grader's __pycache__ for tidiness — eval_hash already ignores it, so this is purely cosmetic.
+  stripPycache(path.join(session.sessionDir, "eval"));
+
   purgeOldStreams(db, session.id);
+}
+
+// Recursively remove __pycache__ directories under `root` (best effort).
+function stripPycache(root) {
+  if (!fs.existsSync(root)) return;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(root, entry.name);
+    if (entry.name === "__pycache__") fs.rmSync(full, { recursive: true, force: true });
+    else stripPycache(full);
+  }
 }
 
 // Delete stream.jsonl from sessions other than `keepSessionId`, except for cells that

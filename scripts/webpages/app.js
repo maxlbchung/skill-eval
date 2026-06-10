@@ -8,7 +8,9 @@ const esc = (v) => { const d = document.createElement("div"); d.textContent = v 
 let CFG = { models: [], conditions: ["skill", "control"], pricing: { weights: {}, inputPerMTok: {} } };
 let selectedSessionId = null;
 let rollup = null;          // /api/session/:id for the selected session
-let liveSnapshot = null;    // last /api/live payload
+let liveSnapshot = null;    // /api/live/:id payload for the selected running session
+let liveSessionsList = [];  // /api/live → sessions running right now (the run-picker list)
+let liveSelectedId = null;  // which running session the Live board is streaming
 let activeTab = "live";
 let selectedSkill = null;   // nav skill-picker — filters all DB-backed views
 let allSkills = [];
@@ -204,25 +206,49 @@ async function selectSkill(skill) {
 
 // ---------- live ----------
 async function pollLive() {
-  try {
-    liveSnapshot = await getJson("/api/live");
-  } catch {
-    liveSnapshot = null;
-  }
-  // surface a brand-new skill (its first-ever run) in the picker without a manual refresh
-  if (liveSnapshot?.skill && !allSkills.includes(liveSnapshot.skill)) {
+  let list = [];
+  try { const r = await getJson("/api/live"); list = r.sessions || []; } catch { list = []; }
+  liveSessionsList = list;
+  // surface a brand-new skill (its first-ever run) in the nav picker without a manual refresh
+  if (list.some((s) => s.skill && !allSkills.includes(s.skill))) {
     try { refreshSkills(await getJson("/api/sessions")); } catch {}
+  }
+  // keep the current selection if it's still live, else default to the newest running session
+  if (!liveSelectedId || !list.some((s) => s.sessionId === liveSelectedId)) {
+    liveSelectedId = list[0]?.sessionId || null;
+  }
+  if (liveSelectedId) {
+    try { liveSnapshot = await getJson(`/api/live/${encodeURIComponent(liveSelectedId)}`); }
+    catch { liveSnapshot = null; }
+  } else {
+    liveSnapshot = null;
   }
   renderLive();
 }
 
+// Run-picker: one chip per session running right now. With file-derived live state a single server
+// shows every concurrent run, so this just switches which one the board streams (shown only when
+// there's more than one to choose between).
+function renderLiveRuns() {
+  const host = $("#live-runs");
+  if (!host) return;
+  if (liveSessionsList.length <= 1) { host.innerHTML = ""; return; }
+  host.innerHTML = liveSessionsList
+    .map((s) => `<button type="button" class="chip ${s.sessionId === liveSelectedId ? "active" : ""}" data-id="${esc(s.sessionId)}">${esc(s.skill)}<span class="sub">${esc((s.startedAt || "").slice(11, 16))}</span></button>`)
+    .join("");
+  for (const b of host.querySelectorAll(".chip")) b.onclick = () => { liveSelectedId = b.dataset.id; pollLive(); };
+}
+
 function renderLive() {
+  renderLiveRuns();
   const strip = $("#live-strip");
   const board = $("#live-board");
   if (!liveSnapshot || !liveSnapshot.sessionId) {
     strip.classList.add("idle");
-    $("#live-title").textContent = "No active session";
-    $("#live-detail").textContent = "Start a run with: node scripts/run.js --skill-dir <dir>";
+    $("#live-title").textContent = liveSessionsList.length ? "Select a running session" : "No active session";
+    $("#live-detail").textContent = liveSessionsList.length
+      ? `${liveSessionsList.length} run${liveSessionsList.length === 1 ? "" : "s"} active`
+      : "Start a run with: node scripts/run.js --skill-dir <dir>";
     board.innerHTML = "";
     return;
   }
@@ -234,38 +260,40 @@ function renderLive() {
   $("#live-detail").textContent = `${done}/${cells.length} settled · session ${liveSnapshot.sessionId}`;
 
   const models = CFG.models.length ? CFG.models : [...new Set(cells.map((c) => c.model))];
+  // Conditions become the two columns (skill | control); only render columns that actually occur.
+  const conditions = (CFG.conditions?.length ? CFG.conditions : ["skill", "control"]).filter((cond) => cells.some((c) => c.condition === cond));
+  const cardHtml = (c) => {
+    const elapsed = (c.status === "building" || c.status === "testing") && c.startedAt ? fmtElapsed(Date.now() - c.startedAt) : "";
+    const out = c.tokens?.output;
+    const cost = liveCost(c.tokens, c.model);
+    const meta =
+      c.status === "pending"
+        ? "queued"
+        : [elapsed, out != null ? `${fmtTokens(out)} out` : null, c.steps ? `${c.steps} steps` : null, cost != null ? fmtUsd(cost) : null]
+            .filter(Boolean)
+            .join(" · ");
+    return `
+      <div class="cell-card ${c.status}">
+        <div class="cc-top">
+          <span class="cc-name">rep ${c.replicate}</span>
+          <span class="cc-badge ${c.status}">${esc(c.status)}</span>
+        </div>
+        <div class="cc-meta">${esc(meta) || "&nbsp;"}</div>
+      </div>`;
+  };
   let html = "";
   for (const model of models) {
     const mcells = cells.filter((c) => c.model === model);
     if (!mcells.length) continue;
-    html += `<div class="live-model"><div class="lm-title">${esc(shortModel(model))} <span class="cc-meta">${esc(model)}</span></div><div class="cell-grid">`;
-    for (const c of mcells.sort(cellOrder)) {
-      const elapsed = (c.status === "building" || c.status === "testing") && c.startedAt ? fmtElapsed(Date.now() - c.startedAt) : "";
-      const out = c.tokens?.output;
-      const cost = liveCost(c.tokens, c.model);
-      const meta =
-        c.status === "pending"
-          ? "queued"
-          : [elapsed, out != null ? `${fmtTokens(out)} out` : null, c.steps ? `${c.steps} steps` : null, cost != null ? fmtUsd(cost) : null]
-              .filter(Boolean)
-              .join(" · ");
-      html += `
-        <div class="cell-card ${c.status}">
-          <div class="cc-top">
-            <span class="cc-name"><span class="cond-pill ${c.condition}">${esc(c.condition)}</span>rep ${c.replicate}</span>
-            <span class="cc-badge ${c.status}">${esc(c.status)}</span>
-          </div>
-          <div class="cc-meta">${esc(meta) || "&nbsp;"}</div>
-        </div>`;
+    html += `<div class="live-model"><div class="lm-title">${esc(shortModel(model))} <span class="cc-meta">${esc(model)}</span></div><div class="cond-cols">`;
+    for (const cond of conditions) {
+      const ccells = mcells.filter((c) => c.condition === cond).sort((a, b) => a.replicate - b.replicate);
+      const cards = ccells.map(cardHtml).join("") || `<div class="cond-empty">—</div>`;
+      html += `<div class="cond-col"><div class="cond-col-h ${esc(cond)}">${esc(cond)}</div><div class="cell-grid">${cards}</div></div>`;
     }
     html += `</div></div>`;
   }
   board.innerHTML = html;
-}
-
-function cellOrder(a, b) {
-  const ci = CFG.conditions.indexOf(a.condition) - CFG.conditions.indexOf(b.condition);
-  return ci !== 0 ? ci : a.replicate - b.replicate;
 }
 
 // ---------- session loading ----------
@@ -343,11 +371,23 @@ async function renderComparison() {
   const maxSteps = Math.max(0, ...rollup.cells.map((c) => c.steps?.max ?? 0));
 
   body.innerHTML =
+    baselineNote() +
     `<div class="charts">
        ${barChart("Custom Eval Score", legend, 1, SCORE_ACCESSOR, scoreLabel)}
        ${barChart("Cost (Weighted Tokens)", legend, maxCost, costAcc, (c) => (c ? fmtUsd(c.cost.mean) : "–"))}
        ${barChart("Steps (Tool Call #)", legend, maxSteps, stepsAcc, (c) => (c ? fmtScalar(c.steps?.mean ?? 0) : "–"))}
      </div>`;
+}
+
+// Per-model note when a session's control came from a cached baseline (Issue 3) rather than
+// being re-measured this session — flags that the skill-vs-control delta is unpaired.
+function baselineNote() {
+  const reused = (rollup?.cells || []).filter((c) => c.condition === "control" && c.fromBaseline);
+  if (!reused.length) return "";
+  const items = reused
+    .map((c) => `${shortModel(c.model)} (n=${c.baseline?.n ?? c.replicates}${c.baseline?.epoch ? ", " + esc(c.baseline.epoch.slice(0, 10)) : ""})`)
+    .join(", ");
+  return `<div class="baseline-note">↺ control reused from a cached baseline for <strong>${items}</strong> — the skill−control delta is <em>unpaired</em> (skill measured this session vs control from an earlier session).</div>`;
 }
 
 // ---------- instance (per-test grid) ----------
@@ -488,6 +528,7 @@ function renderScatter() {
       <div class="chart-box scatter-graph">
         <div class="chart-title" id="scatter-caption">Metric scatter</div>
         <div id="scatter-area"></div>
+        <div class="chart-tip" id="scatter-tip" hidden></div>
       </div>
       <div class="chart-box scatter-side">
         <div class="side-card-h">axes</div>
@@ -512,18 +553,21 @@ function renderScatter() {
 function drawScatter() {
   const area = $("#scatter-area"), legendBox = $("#scatter-legend"), caption = $("#scatter-caption");
   if (!area) return;
+  const tip = $("#scatter-tip"); if (tip) tip.hidden = true; // drop any stale hover from a prior render
   const setEmpty = (msg) => { area.innerHTML = `<div class="empty">${esc(msg)}</div>`; if (legendBox) legendBox.innerHTML = ""; if (caption) caption.textContent = ""; };
   if (!rollup) return setEmpty("No session selected.");
   const xDef = METRIC_DEFS.find((m) => m.key === scatterState.x);
   const yDef = METRIC_DEFS.find((m) => m.key === scatterState.y);
-  const rows = (rollup.cellMetrics || []).filter((r) => scatterState.condition === "both" || r.condition === scatterState.condition);
-  const pts = rows
-    .map((r) => ({ x: xDef.fn(r), y: yDef.fn(r), model: r.model, condition: r.condition, replicate: r.replicate }))
+  // All runs with both metrics finite, across every condition — this set fixes the axis
+  // scale so switching the condition only filters which points are drawn, never rescales.
+  const allPts = (rollup.cellMetrics || [])
+    .map((r) => ({ x: xDef.fn(r), y: yDef.fn(r), model: r.model, condition: r.condition, replicate: r.replicate, row: r }))
     .filter((p) => p.x != null && Number.isFinite(p.x) && p.y != null && Number.isFinite(p.y));
-  if (!pts.length) return setEmpty("No runs have both metrics for this selection.");
+  if (!allPts.length) return setEmpty("No runs have both metrics for this selection.");
+  const pts = allPts.filter((p) => scatterState.condition === "both" || p.condition === scatterState.condition);
 
   let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
-  for (const p of pts) { xMin = Math.min(xMin, p.x); xMax = Math.max(xMax, p.x); yMin = Math.min(yMin, p.y); yMax = Math.max(yMax, p.y); }
+  for (const p of allPts) { xMin = Math.min(xMin, p.x); xMax = Math.max(xMax, p.x); yMin = Math.min(yMin, p.y); yMax = Math.max(yMax, p.y); }
   if (xMin === xMax) { xMin -= 1; xMax += 1; }
   if (yMin === yMax) { yMin -= 1; yMax += 1; }
 
@@ -547,17 +591,51 @@ function drawScatter() {
   }
   svg += `<text x="${(padL + plotW / 2).toFixed(0)}" y="${H - 6}" class="axis-title">${esc(xDef.label)}</text>`;
   svg += `<text transform="translate(14 ${(padT + plotH / 2).toFixed(0)}) rotate(-90)" class="axis-title">${esc(yDef.label)}</text>`;
-  for (const p of pts) {
+  pts.forEach((p, i) => {
     const c = scatterModelColor(p.model);
-    const title = `${shortModel(p.model)} · ${p.condition} · rep ${p.replicate}\n${xDef.label}: ${fmtMetricVal(scatterState.x, p.x)}\n${yDef.label}: ${fmtMetricVal(scatterState.y, p.y)}`;
-    svg += `<circle cx="${xOf(p.x).toFixed(1)}" cy="${yOf(p.y).toFixed(1)}" r="5" fill="${c}" fill-opacity="0.72" stroke="${c}" stroke-width="1"><title>${esc(title)}</title></circle>`;
-  }
+    svg += `<circle class="dot" data-idx="${i}" cx="${xOf(p.x).toFixed(1)}" cy="${yOf(p.y).toFixed(1)}" r="5" fill="${c}" fill-opacity="0.72" stroke="${c}" stroke-width="1.5"/>`;
+  });
   svg += `</svg>`;
   area.innerHTML = svg;
+
+  // hover a dot → rich tooltip with this run's identity and every metric value
+  const svgEl = area.querySelector("svg");
+  if (tip && svgEl) {
+    const box = area.closest(".scatter-graph");
+    const move = (e) => {
+      const dot = e.target.classList?.contains("dot") ? e.target : null;
+      const p = dot ? pts[+dot.dataset.idx] : null;
+      if (!p) { tip.hidden = true; return; }
+      tip.innerHTML = scatterTipHtml(p);
+      tip.hidden = false;
+      const br = box.getBoundingClientRect();
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      let left = e.clientX - br.left + 14, top = e.clientY - br.top + 14;
+      if (left + tw > br.width) left = e.clientX - br.left - tw - 14;
+      if (top + th > br.height) top = e.clientY - br.top - th - 14;
+      tip.style.left = Math.max(4, left) + "px";
+      tip.style.top = Math.max(4, top) + "px";
+    };
+    svgEl.addEventListener("mousemove", move);
+    svgEl.addEventListener("mouseleave", () => { tip.hidden = true; });
+  }
 
   caption.textContent = `${yDef.label} vs ${xDef.label} — ${scatterState.condition === "both" ? "skill & control" : scatterState.condition} · ${pts.length} run${pts.length === 1 ? "" : "s"}`;
   const present = [...new Set(pts.map((p) => p.model))];
   legendBox.innerHTML = present.map((m) => `<div class="leg-item"><span class="leg-dot" style="background:${scatterModelColor(m)}"></span><span>${esc(shortModel(m))}</span></div>`).join("");
+}
+
+// Hover-card body for one scatter dot: model/condition/rep plus every metric (the two
+// plotted axes are flagged x/y and emphasised) evaluated against that run's raw row.
+function scatterTipHtml(p) {
+  const head =
+    `<div class="tip-h"><span class="leg-dot" style="background:${scatterModelColor(p.model)}"></span>${esc(shortModel(p.model))}</div>` +
+    `<div class="tip-sub"><span class="cond-pill ${esc(p.condition)}">${esc(p.condition)}</span>rep ${esc(String(p.replicate))}</div>`;
+  const rows = METRIC_DEFS.map((d) => {
+    const axis = d.key === scatterState.x ? "x" : d.key === scatterState.y ? "y" : "";
+    return `<div class="tip-mrow${axis ? " active" : ""}"><span class="tip-mlabel">${esc(d.label)}${axis ? ` <em>${axis}</em>` : ""}</span><span class="tip-mval">${esc(fmtMetricVal(d.key, d.fn(p.row)))}</span></div>`;
+  }).join("");
+  return head + `<div class="tip-metrics">${rows}</div>`;
 }
 
 // ---------- history + iteration chart ----------
@@ -621,7 +699,8 @@ function computeStats(vals) {
   const n = s.length;
   if (!n) return null;
   const mean = s.reduce((a, b) => a + b, 0) / n;
-  return { mean, min: s[0], max: s[n - 1], median: pctile(s, 0.5), q1: pctile(s, 0.25), q3: pctile(s, 0.75), n };
+  const sd = Math.sqrt(s.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+  return { mean, sd, min: s[0], max: s[n - 1], median: pctile(s, 0.5), q1: pctile(s, 0.25), q3: pctile(s, 0.75), n };
 }
 
 const STAT_KEYS = ["mean", "median", "min", "max", "q1", "q3"];
@@ -660,6 +739,7 @@ async function renderHistory() {
       <div class="chart-side-wrap">
         <button class="side-toggle" id="side-toggle" type="button">▶</button>
         <aside class="chart-side" id="chart-side">
+          <div class="side-card"><div class="side-card-h">regime</div><div id="regime-controls"></div></div>
           <div class="side-card"><div class="side-card-h">controls</div><div id="chart-controls"></div></div>
           <div class="side-card"><div class="side-card-h">legend</div><div id="chart-legend"></div></div>
         </aside>
@@ -781,20 +861,112 @@ function drawChart() {
   const area = $("#chart-area");
   const caption = $("#chart-caption");
   const legendBox = $("#chart-legend");
-  const setEmpty = (msg) => { area.innerHTML = `<div class="empty">${esc(msg)}</div>`; caption.textContent = ""; legendBox.innerHTML = ""; };
+  const toolbar = $("#chart-toolbar");
+  const tipEl = $("#chart-tip"); if (tipEl) tipEl.hidden = true;
+  const setEmpty = (msg) => {
+    area.classList.remove("faceted");
+    area.innerHTML = `<div class="empty">${esc(msg)}</div>`;
+    caption.textContent = ""; legendBox.innerHTML = "";
+    const rc = $("#regime-controls"); if (rc) rc.innerHTML = "";
+  };
   if (!cellsData || !cellsData.length) return setEmpty("No completed sessions yet — run the tester to populate the chart.");
 
-  // group rows into iterations (sessions) for the selected skill, ordered by time
+  // Group rows into iterations (sessions) for the selected skill, ordered by time, then split into
+  // comparable regimes — one per (eval_hash, control epoch). Incomparable regimes never share an
+  // axis; each is its own panel (Issue 2).
   const scoped = selectedSkill ? cellsData.filter((r) => r.skill_name === selectedSkill) : cellsData;
   if (!scoped.length) return setEmpty(`No completed sessions for ${selectedSkill || "this skill"} yet.`);
   const bySession = new Map();
   for (const r of scoped) {
-    if (!bySession.has(r.session_id)) bySession.set(r.session_id, { id: r.session_id, started_at: r.started_at, skill_name: r.skill_name, skill_hash: r.skill_hash, rows: [] });
+    if (!bySession.has(r.session_id)) bySession.set(r.session_id, { id: r.session_id, started_at: r.started_at, skill_name: r.skill_name, skill_hash: r.skill_hash, eval_hash: r.eval_hash, rows: [] });
     bySession.get(r.session_id).rows.push(r);
   }
   const iters = [...bySession.values()].sort((a, b) => (a.started_at < b.started_at ? -1 : a.started_at > b.started_at ? 1 : 0));
+  const regimes = computeRegimes(iters);
+  buildRegimeControl(regimes);
+  if (!regimes.length) return setEmpty("No data for this selection.");
+  const sel = effectiveRegimeSel(regimes);
 
+  // Shared caption + legend — the per-panel y-axes differ, but the series/metric selection is one.
+  const { series, statKeys } = buildSeries();
   const metricDef = METRIC_DEFS.find((m) => m.key === chartState.metric);
+  const allModels = chartState.models.size === (CFG.models?.length || 0);
+  const typeLabel = { skill: "skill", control: "control", both: "skill vs control", difference: "skill − control" }[chartState.type] || chartState.type;
+  const modelsLabel = allModels ? "all models" : [...chartState.models].map(shortModel).join(" + ");
+  const pinned = regimes.find((r) => r.key === sel) || regimes[regimes.length - 1];
+  const scopeLabel = sel === "all" ? `${regimes.length} regime${regimes.length === 1 ? "" : "s"} (faceted)` : `regime ${pinned.n}`;
+  caption.textContent = `${metricDef.label} — ${typeLabel} · ${modelsLabel} · ${chartState.mode === "vs" ? "per model" : "pooled"} · ${scopeLabel}`;
+  const legend = [];
+  const seen = new Set();
+  for (const s of series) for (const sk of statKeys) {
+    const def = STAT_DEFS.find((d) => d.key === sk);
+    const label = `${s.label ? s.label + " · " : ""}${def.label}`;
+    const k = `${s.color}|${def.dash}|${label}`; if (seen.has(k)) continue; seen.add(k);
+    legend.push({ color: s.color, dash: def.dash, label });
+  }
+  legendBox.innerHTML =
+    legend.map((l) => `<div class="leg-item"><svg width="24" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="${l.color}" stroke-width="2.4" stroke-dasharray="${l.dash}"/></svg><span>${esc(l.label)}</span></div>`).join("") +
+    `<div class="leg-item leg-note"><svg width="24" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4,3"/></svg><span>control = flat baseline per regime</span></div>`;
+
+  // Faceted overview (one static panel per regime, click to pin) vs a single pinned regime
+  // (full-size, interactive zoom/pan + analysis). Panels never share a y-axis.
+  if (sel === "all") {
+    if (toolbar) toolbar.style.visibility = "hidden";
+    area.classList.add("faceted");
+    area.innerHTML = "";
+    for (const r of regimes) {
+      const host = document.createElement("div");
+      host.className = "rg-panel";
+      host.innerHTML = `<div class="rg-label">${regimeLabelHtml(r)}</div><div class="rg-svg"></div>`;
+      host.onclick = () => { chartState.regimeSel = r.key; redraw(); };
+      area.appendChild(host);
+      renderRegimePanel(host, r, { interactive: false });
+    }
+  } else {
+    if (toolbar) toolbar.style.visibility = "visible";
+    area.classList.remove("faceted");
+    area.innerHTML = "";
+    const host = document.createElement("div");
+    host.className = "rg-panel single";
+    host.innerHTML = `<div class="rg-label"><button type="button" class="rg-back">‹ all regimes</button> ${regimeLabelHtml(pinned)}</div><div class="rg-svg"></div>`;
+    host.querySelector(".rg-back").onclick = (e) => { e.stopPropagation(); chartState.regimeSel = "all"; redraw(); };
+    area.appendChild(host);
+    renderRegimePanel(host, pinned, { interactive: true });
+  }
+}
+
+// Split time-ordered iterations into comparable regimes. A regime = one (eval_hash, control
+// epoch): within an eval_hash, each session that ran control opens a new epoch and a skill-only
+// session attaches to the most recent prior epoch. NULL eval_hash (pre-Issue-1) collapses into one
+// "unknown" group. Regimes are returned in first-seen (time) order and numbered accordingly.
+function computeRegimes(iters) {
+  const regimes = [];
+  const openByEval = new Map();
+  let unknown = null;
+  for (const it of iters) {
+    const eh = it.eval_hash;
+    const hasControl = it.rows.some((r) => r.condition === "control");
+    if (eh == null) {
+      if (!unknown) { unknown = { key: "unknown", evalHash: null, iters: [], controlIters: [] }; regimes.push(unknown); }
+      unknown.iters.push(it);
+      if (hasControl) unknown.controlIters.push(it);
+      continue;
+    }
+    let cur = openByEval.get(eh);
+    if (!cur || hasControl) {
+      cur = { key: `${eh}#${regimes.length}`, evalHash: eh, iters: [], controlIters: [] };
+      regimes.push(cur);
+      openByEval.set(eh, cur);
+    }
+    cur.iters.push(it);
+    if (hasControl) cur.controlIters.push(it);
+  }
+  regimes.forEach((r, i) => { r.n = i + 1; });
+  return regimes;
+}
+
+// The per-(type/model/mode) series definition shared by the caption/legend and every panel.
+function buildSeries() {
   const condGroups =
     chartState.type === "both" ? [{ key: "skill", color: "#22c55e", conds: ["skill"] }, { key: "control", color: "#f59e0b", conds: ["control"] }]
     : chartState.type === "difference" ? [{ key: "difference", color: "#3b82f6", conds: ["skill", "control"], diff: true }]
@@ -802,10 +974,6 @@ function drawChart() {
     : [{ key: "skill", color: "#22c55e", conds: ["skill"] }];
   const statKeys = STAT_DEFS.filter((s) => chartState.stats.has(s.key)).map((s) => s.key);
   const selModels = (CFG.models || []).filter((m) => chartState.models.has(m));
-
-  // A series is what one line set represents. mode=pool: one series per condition group
-  // (selected models combined). mode=vs: one series per (condition group × model), so each
-  // model gets its own line(s).
   const PALETTE = ["#22c55e", "#f59e0b", "#3b82f6", "#a855f7", "#ef4444", "#14b8a6", "#eab308", "#ec4899"];
   const series = [];
   if (chartState.mode === "vs") {
@@ -816,21 +984,78 @@ function drawChart() {
   } else {
     for (const g of condGroups) series.push({ key: g.key, label: condGroups.length > 1 ? g.key : "", color: g.color, group: g, models: selModels });
   }
+  return { condGroups, statKeys, selModels, series };
+}
+
+// Default regime selection = the latest (newest) regime, pinned full-size. "all" = faceted overview.
+function effectiveRegimeSel(regimes) {
+  const sel = chartState.regimeSel;
+  if (sel === "all") return "all";
+  if (sel && regimes.some((r) => r.key === sel)) return sel;
+  return regimes.length ? regimes[regimes.length - 1].key : "all";
+}
+
+function regimeLabelHtml(r) {
+  const tests = r.evalHash ? r.evalHash.slice(0, 8) : "unknown";
+  const cdate = r.controlIters[0]?.started_at?.slice(0, 10) || "—";
+  const models = [...new Set(r.iters.flatMap((it) => it.rows.map((x) => x.model)))].map(shortModel).join(", ");
+  return `<strong>regime ${r.n}</strong> · tests <code>${esc(tests)}</code> · control ${esc(cdate)} · ${esc(models)}`;
+}
+
+// The regime selector dropdown (data-dependent → rebuilt each draw into #regime-controls).
+function buildRegimeControl(regimes) {
+  const host = $("#regime-controls");
+  if (!host) return;
+  host.innerHTML = "";
+  const opts = [{ key: "all", label: "all (faceted)" }, ...regimes.map((r) => ({ key: r.key, label: `regime ${r.n}` }))];
+  host.append(dropdown({
+    label: "show", multi: false, groupsDefs: [{ items: opts }],
+    isOn: (k) => effectiveRegimeSel(regimes) === k,
+    pick: (k) => { chartState.regimeSel = k; },
+    summarize: () => { const k = effectiveRegimeSel(regimes); return opts.find((o) => o.key === k)?.label ?? "latest"; },
+    onChange: redraw,
+  }));
+}
+
+// Render one regime into `host` (its OWN y-axis). Skill = the moving polyline; control = a flat
+// baseline line + ±sd band (pooled over the regime's control cells, with a marker on the sessions
+// that actually measured it). Interactive panels get zoom/pan + click-to-analyze; faceted panels
+// are static and click to pin.
+function renderRegimePanel(host, regime, { interactive }) {
+  const area = host.querySelector(".rg-svg");
+  const iters = regime.iters;
+  const { series, statKeys } = buildSeries();
   const seriesByKey = new Map(series.map((s) => [s.key, s]));
+  const metricDef = METRIC_DEFS.find((m) => m.key === chartState.metric);
+  const isFlatControl = (s) => !s.group.diff && s.group.conds.includes("control");
 
   // members = the individual per-cell values behind a point (shown in the tooltip)
   const memberize = (rows, models) =>
     rows.filter((r) => models.includes(r.model)).map((r) => ({ label: `${shortModel(r.model)} · replicate ${r.replicate}`, value: metricDef.fn(r) })).filter((m) => m.value != null && Number.isFinite(m.value));
 
-  const perIter = iters.map((it) => {
+  // Control is constant within a regime (one epoch) → pool ALL of the regime's control cells into a
+  // flat baseline reused at every x. Skill-only iters inherit the line; measured iters get a marker.
+  const controlRows = iters.flatMap((it) => it.rows).filter((r) => r.condition === "control");
+  const controlBaseline = new Map();
+  for (const s of series) {
+    if (isFlatControl(s) || s.group.diff) {
+      const members = memberize(controlRows, s.models);
+      controlBaseline.set(s.key, { stats: computeStats(members.map((m) => m.value)), members });
+    }
+  }
+  const measuredByIter = iters.map((it) => it.rows.some((r) => r.condition === "control"));
+
+  const perIter = iters.map((it, idx) => {
     const out = {};
     for (const sx of series) {
       if (sx.group.diff) {
         const skMembers = memberize(it.rows.filter((r) => r.condition === "skill"), sx.models);
-        const coMembers = memberize(it.rows.filter((r) => r.condition === "control"), sx.models);
         const skStats = computeStats(skMembers.map((m) => m.value));
-        const coStats = computeStats(coMembers.map((m) => m.value));
-        out[sx.key] = { stats: diffStats(skStats, coStats), skStats, coStats, skMembers, coMembers, diff: true };
+        const co = controlBaseline.get(sx.key);
+        out[sx.key] = { stats: diffStats(skStats, co?.stats), skStats, coStats: co?.stats, skMembers, coMembers: co?.members || [], diff: true };
+      } else if (isFlatControl(sx)) {
+        const co = controlBaseline.get(sx.key);
+        out[sx.key] = { stats: co?.stats || null, members: co?.members || [], flat: true, measured: measuredByIter[idx] };
       } else {
         const members = memberize(it.rows.filter((r) => sx.group.conds.includes(r.condition)), sx.models);
         out[sx.key] = { stats: computeStats(members.map((m) => m.value)), members };
@@ -846,7 +1071,7 @@ function drawChart() {
     const ss = st[s.key]?.stats; if (!ss) continue;
     for (const k of statKeys) { const v = ss[k]; if (v != null) { yLo = Math.min(yLo, v); yHi = Math.max(yHi, v); } }
   }
-  if (!Number.isFinite(yLo)) return setEmpty("No data for this selection.");
+  if (!Number.isFinite(yLo)) { area.innerHTML = `<div class="empty" style="padding:1rem">No data for this selection.</div>`; return; }
   if (yLo === yHi) { yLo -= 1; yHi += 1; }
   const yt0 = niceTicks(yLo, yHi, 5);
   const yBase = [yt0[0], yt0[yt0.length - 1]];
@@ -866,21 +1091,6 @@ function drawChart() {
   const sy = (v) => padT + plotH - ((v - dom.y0) / (dom.y1 - dom.y0)) * plotH;
   const ix = (px) => dom.x0 + ((px - padL) / plotW) * (dom.x1 - dom.x0);
   const iv = (py) => dom.y0 + ((padT + plotH - py) / plotH) * (dom.y1 - dom.y0);
-
-  // caption + legend (domain-independent)
-  const legend = [];
-  for (const s of series) for (const sk of statKeys) {
-    if (!perIter.some((st) => st[s.key]?.stats?.[sk] != null)) continue;
-    const def = STAT_DEFS.find((d) => d.key === sk);
-    legend.push({ color: s.color, dash: def.dash, label: `${s.label ? s.label + " · " : ""}${def.label}` });
-  }
-  const allModels = chartState.models.size === (CFG.models?.length || 0);
-  const typeLabel = { skill: "skill", control: "control", both: "skill vs control", difference: "skill − control" }[chartState.type] || chartState.type;
-  const modelsLabel = allModels ? "all models" : [...chartState.models].map(shortModel).join(" + ");
-  caption.textContent = `${metricDef.label} — ${typeLabel} · ${modelsLabel} · ${chartState.mode === "vs" ? "per model" : "pooled"}`;
-  legendBox.innerHTML = legend.length
-    ? legend.map((l) => `<div class="leg-item"><svg width="24" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="${l.color}" stroke-width="2.4" stroke-dasharray="${l.dash}"/></svg><span>${esc(l.label)}</span></div>`).join("")
-    : `<div class="empty">—</div>`;
 
   // skeleton: axes group (pinned) + clipped plot group (the part that zooms/pans)
   area.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="iter-chart">` +
@@ -926,21 +1136,46 @@ function drawChart() {
 
   function renderPlot() {
     let p = "", hits = "";
+    // shaded spread bands for the moving (non-flat) series
     for (const s of series) {
-      if (s.group.diff) continue;
+      if (s.group.diff || isFlatControl(s)) continue;
       if (chartState.stats.has("min") && chartState.stats.has("max")) p += bandPath(s.key, "min", "max", s.color, 0.08);
       if (chartState.stats.has("q1") && chartState.stats.has("q3")) p += bandPath(s.key, "q1", "q3", s.color, 0.16);
     }
-    for (const s of series) for (const sk of statKeys) {
-      const def = STAT_DEFS.find((d) => d.key === sk);
-      const pts = [];
-      perIter.forEach((st, i) => { const v = st[s.key]?.stats?.[sk]; if (v != null) pts.push({ x: sx(i), y: sy(v), i }); });
-      if (!pts.length) continue;
-      const isMean = sk === "mean";
-      p += `<polyline points="${pts.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" ")}" fill="none" stroke="${s.color}" stroke-width="${isMean ? 2.4 : 1.4}" stroke-dasharray="${def.dash}" opacity="${isMean ? 1 : 0.82}"/>`;
-      for (const q of pts) {
-        p += `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${isMean ? 3 : 2.2}" fill="${s.color}"/>`;
-        hits += `<circle class="pt" cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="9" fill="transparent" data-g="${esc(s.key)}" data-i="${q.i}" data-sk="${esc(sk)}"/>`;
+    // flat control baseline: a full-width horizontal reference line at the mean + a ±sd band, with a
+    // marker only on the sessions that actually measured control (skill-only iters inherit the line).
+    for (const s of series) {
+      if (!isFlatControl(s)) continue;
+      const stt = controlBaseline.get(s.key)?.stats; if (!stt) continue;
+      if (stt.sd > 0) {
+        const yTop = sy(stt.mean + stt.sd), yBot = sy(stt.mean - stt.sd);
+        p += `<rect x="${padL.toFixed(1)}" y="${Math.min(yTop, yBot).toFixed(1)}" width="${plotW.toFixed(1)}" height="${Math.abs(yBot - yTop).toFixed(1)}" fill="${s.color}" opacity="0.1"/>`;
+      }
+      if (statKeys.includes("mean")) {
+        const y = sy(stt.mean);
+        p += `<line x1="${padL.toFixed(1)}" y1="${y.toFixed(1)}" x2="${(padL + plotW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="${s.color}" stroke-width="2" stroke-dasharray="4,3" opacity="0.95"/>`;
+        perIter.forEach((st, i) => {
+          if (!st[s.key]?.measured) return;
+          const x = sx(i);
+          p += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2" fill="${s.color}"/>`;
+          hits += `<circle class="pt" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="9" fill="transparent" data-g="${esc(s.key)}" data-i="${i}" data-sk="mean"/>`;
+        });
+      }
+    }
+    // moving series (skill, difference): polylines + per-iteration markers
+    for (const s of series) {
+      if (isFlatControl(s)) continue;
+      for (const sk of statKeys) {
+        const def = STAT_DEFS.find((d) => d.key === sk);
+        const pts = [];
+        perIter.forEach((st, i) => { const v = st[s.key]?.stats?.[sk]; if (v != null) pts.push({ x: sx(i), y: sy(v), i }); });
+        if (!pts.length) continue;
+        const isMean = sk === "mean";
+        p += `<polyline points="${pts.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" ")}" fill="none" stroke="${s.color}" stroke-width="${isMean ? 2.4 : 1.4}" stroke-dasharray="${def.dash}" opacity="${isMean ? 1 : 0.82}"/>`;
+        for (const q of pts) {
+          p += `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${isMean ? 3 : 2.2}" fill="${s.color}"/>`;
+          hits += `<circle class="pt" cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="9" fill="transparent" data-g="${esc(s.key)}" data-i="${q.i}" data-sk="${esc(sk)}"/>`;
+        }
       }
     }
     plotG.innerHTML = p + hits;
@@ -949,6 +1184,8 @@ function drawChart() {
   const tip = $("#chart-tip");
   const renderView = () => { tip.hidden = true; renderAxes(); renderPlot(); };
 
+  // Interactive (pinned) panels get zoom/pan + click-to-analyze; faceted panels are static.
+  if (interactive) {
   // ---- zoom / pan: change the DATA domain (axes stay pinned, ticks recompute) ----
   const minXW = (xBase[1] - xBase[0]) / 50, minYW = (yBase[1] - yBase[0]) / 50;
   const zoomAt = (cx, cy, f) => {
@@ -1046,6 +1283,7 @@ function drawChart() {
     const ob = tip.querySelector(".tip-open");
     if (ob) ob.onclick = (ev) => { ev.stopPropagation(); tip.hidden = true; selectedSessionId = ob.dataset.id; rollup = null; setTab("instance"); };
   });
+  }
 
   renderView();
 }

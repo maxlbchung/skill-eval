@@ -56,6 +56,7 @@ h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: .4rem; }
 
 /* selector chips (sessions / instances) */
 .selector { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1.75rem; }
+.selector:empty { display: none; }
 .chip { background: var(--panel); color: var(--muted); border: 1px solid transparent; border-radius: .5rem; padding: .55rem 1.1rem; cursor: pointer; font-size: 1rem; transition: all .15s; }
 .chip:hover { background: var(--panel-2); color: var(--text); }
 .chip.active { background: var(--panel-2); color: var(--text); border-color: #475569; }
@@ -111,6 +112,11 @@ h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: .4rem; }
 .bar-val { font-size: .95rem; color: var(--text); white-space: nowrap; min-width: 8.5rem; }
 .bar-val .spread { color: var(--dim); font-size: .82rem; }
 
+/* baseline-reuse provenance note (control came from a cached baseline, not this session) */
+.baseline-note { background: rgba(245,158,11,.1); border-left: 3px solid var(--control); border-radius: 0 .4rem .4rem 0; padding: .6rem .85rem; margin-bottom: 1.25rem; font-size: .88rem; color: #cbd5e1; line-height: 1.5; }
+.baseline-note strong { color: var(--text); }
+.baseline-note em { color: var(--control); font-style: normal; font-weight: 600; }
+
 /* token columns (cost / effort) */
 .token-cols { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 1.75rem; }
 
@@ -155,11 +161,17 @@ tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .status-strip span { color: var(--muted); margin-left: .5rem; }
 .live-model { margin-bottom: 1.5rem; }
 .live-model > .lm-title { font-size: 1.05rem; font-weight: 700; margin-bottom: .6rem; }
+.cond-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; align-items: start; }
+.cond-col { min-width: 0; }
+.cond-col-h { display: inline-block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: .15rem .5rem; border-radius: 4px; margin-bottom: .55rem; }
+.cond-col-h.skill { background: rgba(34,197,94,.16); color: #86efac; }
+.cond-col-h.control { background: rgba(245,158,11,.16); color: #fcd34d; }
+.cond-empty { color: var(--dim); font-size: .8rem; padding: .4rem .1rem; }
 .cell-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .6rem; }
 .cell-card { background: var(--panel); border: 1px solid var(--line-soft); border-left-width: 4px; border-radius: 8px; padding: .65rem .7rem; min-width: 0; }
 .cell-card.pending { border-left-color: var(--dim); }
 .cell-card.building { border-left-color: var(--run); }
-.cell-card.built { border-left-color: #0ea5e9; }
+.cell-card.built { border-left-color: #22d3ee; }
 .cell-card.testing { border-left-color: var(--control); }
 .cell-card.done { border-left-color: var(--pass); }
 .cell-card.failed { border-left-color: var(--fail); }
@@ -167,8 +179,8 @@ tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .cc-name { font-size: .82rem; font-weight: 700; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-badge { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: .12rem .4rem; border-radius: 999px; white-space: nowrap; }
 .cc-badge.pending { color: var(--dim); }
-.cc-badge.building { color: #bfdbfe; }
-.cc-badge.built { color: #7dd3fc; }
+.cc-badge.building { color: #93c5fd; }
+.cc-badge.built { color: #67e8f9; }
 .cc-badge.testing { color: #fde68a; }
 .cc-badge.done { color: #bbf7d0; }
 .cc-badge.failed { color: #fecaca; }
@@ -239,22 +251,46 @@ tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .iter-chart .axis-title { fill: var(--dim); font-size: 11px; text-anchor: middle; }
 .iter-chart .zeroline { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4,4; opacity: .6; }
 .iter-chart .zerolabel { fill: var(--muted); font-size: 10px; text-anchor: end; }
+
+/* regime-faceted history: each (eval_hash, control-epoch) group is its own panel + own y-axis,
+   so incomparable regimes never share a scale. One pinned panel (interactive) or a faceted grid. */
+#chart-area { display: flex; flex-direction: column; }
+#chart-area.faceted { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1rem; align-content: start; overflow: auto; padding: .4rem 1rem 1.5rem; }
+.rg-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.rg-panel.single { flex: 1; min-height: 0; }
+#chart-area.faceted .rg-panel { background: var(--panel); border: 1px solid var(--line-soft); border-radius: .6rem; padding: .55rem .7rem; cursor: pointer; }
+#chart-area.faceted .rg-panel:hover { border-color: #475569; }
+.rg-label { flex: none; font-size: .82rem; color: var(--muted); line-height: 1.4; margin-bottom: .35rem; }
+.rg-label strong { color: var(--text); font-weight: 700; }
+.rg-label code { font-family: "Cascadia Code", "Consolas", monospace; font-size: .76rem; color: #cbd5e1; }
+.rg-svg { flex: 1; min-height: 0; }
+#chart-area.faceted .rg-svg { flex: none; height: 230px; }
+.rg-back { background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); border-radius: .35rem; padding: .1rem .5rem; margin-right: .4rem; cursor: pointer; font-size: .78rem; }
+.rg-back:hover { background: var(--panel); color: var(--text); }
+.leg-note { color: var(--dim); font-size: .76rem; margin-top: .3rem; }
 #chart-legend { display: flex; flex-direction: column; gap: .35rem; max-height: 32vh; overflow: auto; }
 .leg-item { display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .82rem; }
 .leg-item svg { flex: none; }
 /* metric scatter: a small plot card + a compact controls/legend card beside it (bar-chart style) */
-.scatter-graph { flex: 0 1 540px; min-width: 300px; }
+.scatter-graph { flex: 0 1 540px; min-width: 300px; position: relative; }
 .scatter-side { flex: 0 1 250px; min-width: 210px; }
 .scatter-graph .chart-title { margin-bottom: .9rem; }
 #scatter-area .iter-chart { background: var(--bg); border-radius: .5rem; }
-#scatter-area .iter-chart circle { cursor: default; }
+#scatter-area .iter-chart circle.dot { cursor: pointer; transition: fill-opacity .1s ease, stroke-width .1s ease, r .1s ease; }
+#scatter-area .iter-chart circle.dot:hover { fill-opacity: 1; stroke-width: 2.5; r: 7.5; }
+#scatter-tip { pointer-events: none; max-width: 230px; }
 .leg-list { display: flex; flex-direction: column; gap: .35rem; }
 .leg-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
 
 /* hover tooltip */
 .chart-tip { position: absolute; z-index: 40; pointer-events: auto; background: #0b1220; border: 1px solid var(--line); border-radius: .5rem; padding: .55rem .65rem; font-size: .78rem; color: var(--text); max-width: 260px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
-.tip-h { font-weight: 700; margin-bottom: .15rem; }
+.tip-h { font-weight: 700; margin-bottom: .15rem; display: flex; align-items: center; gap: .4rem; }
 .tip-row { margin: .2rem 0; }
+.tip-metrics { margin-top: .5rem; border-top: 1px solid var(--line); padding-top: .4rem; display: flex; flex-direction: column; gap: .14rem; font-family: "Cascadia Code", "Consolas", monospace; font-size: .72rem; }
+.tip-mrow { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; color: #94a3b8; }
+.tip-mrow.active { color: var(--text); font-weight: 700; }
+.tip-mlabel em { font-style: normal; text-transform: uppercase; font-size: .62rem; color: var(--run); margin-left: .25rem; }
+.tip-mval { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tip-sub { color: var(--muted); font-size: .72rem; margin-top: .25rem; }
 .tip-vals { color: #cbd5e1; font-family: "Cascadia Code", "Consolas", monospace; font-size: .72rem; line-height: 1.5; margin-top: .1rem; max-height: 150px; overflow-y: auto; }
 .tip-open { margin-top: .55rem; width: 100%; background: var(--run); color: #fff; border: none; border-radius: .35rem; padding: .4rem .5rem; cursor: pointer; font-size: .76rem; font-weight: 600; }
