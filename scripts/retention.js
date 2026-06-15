@@ -8,9 +8,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { SESSIONS_DIR, parseCellDir } from "./config.js";
 
-// Whitelist of what a settled cell keeps. Everything else — output/, the skill/ copy,
-// transient markers (.done/.failed/supervisor.log), eval.log, and any scratch files the
-// agent created in its cwd — is deleted, so the immutable session never accumulates litter.
+// Whitelist of what a settled cell keeps. Everything else — output/, the skill/ copy, the
+// delivered input files, transient markers (.done/.failed/supervisor.log), eval.log, and any
+// scratch the agent created in its cwd — is deleted, so the immutable session never accumulates
+// litter. (Inputs survive forever in the eval/ snapshot, so dropping the cell copies is lossless.)
 const KEEP = new Set(["result.json", "stream.jsonl"]);
 
 export function retainSession(db, session) {

@@ -77,6 +77,19 @@ export function hashEvalDir(dir, extraNames = null) {
   return h.digest("hex");
 }
 
+// The full eval_hash for an eval/ dir + its parsed spec: hashEvalDir (ignoring the runner's declared
+// outputs) with any --prompt/--prompt-file override folded in (an ad-hoc task is its own regime).
+// Shared by prepareSession (on the per-session snapshot) and preflight.js (on the live eval/ dir) so
+// the two can never disagree about which regime a run belongs to — they hash the same bytes the same
+// way, and the EVAL_EXCLUDE filter makes live-vs-snapshot identical.
+export function computeEvalHash(evalDir, evalSpec, promptOverride = null) {
+  let evalHash = hashEvalDir(evalDir, new Set(evalSpec.required || []));
+  if (promptOverride) {
+    evalHash = crypto.createHash("sha256").update(evalHash).update("\0").update(promptOverride).digest("hex");
+  }
+  return evalHash;
+}
+
 // db: an open Db (db.js). Returns the session descriptor used by later phases.
 export function prepareSession(db, cfg, skillDir, opts = {}) {
   if (!fs.existsSync(path.join(skillDir, "SKILL.md"))) {
@@ -110,17 +123,14 @@ export function prepareSession(db, cfg, skillDir, opts = {}) {
   copyTree(liveEvalDir, evalSnapshot, evalExclude);
   const evalMdPath = findEvalDoc(evalSnapshot);
   const evalSpec = parseEvalMd(evalMdPath);
-  let evalHash = hashEvalDir(evalSnapshot, new Set(evalSpec.required || []));
-  // A --prompt/--prompt-file override bypasses eval.md's prompt, so fold it into eval_hash: an
-  // ad-hoc task is its own regime and must never pool with the eval.md-derived one.
-  if (opts.promptOverride) {
-    evalHash = crypto.createHash("sha256").update(evalHash).update("\0").update(opts.promptOverride).digest("hex");
-  }
+  // A --prompt/--prompt-file override bypasses eval.md's prompt, so it's folded into eval_hash (an
+  // ad-hoc task is its own regime). Shared with preflight.js via computeEvalHash.
+  const evalHash = computeEvalHash(evalSnapshot, evalSpec, opts.promptOverride);
 
-  // 2. Assemble the two prompts from the IMMUTABLE snapshots (skill body from skill/, input
-  //    fixtures from eval/); write → prompts/ ; read the bytes back (load-bearing: builds launch
-  //    from these exact bytes, so the kept artifact can't drift).
-  const assembled = assemblePrompts({ skillDir: snapshotDir, evalDir: evalSnapshot, evalSpec, promptOverride: opts.promptOverride });
+  // 2. Assemble the two prompts from the IMMUTABLE skill/ snapshot (the prompt only NAMES the input
+  //    files — they're delivered to each cell's cwd in step 3); write → prompts/ ; read the bytes
+  //    back (load-bearing: builds launch from these exact bytes, so the kept artifact can't drift).
+  const assembled = assemblePrompts({ skillDir: snapshotDir, evalSpec, promptOverride: opts.promptOverride });
   const promptsDir = path.join(sessionDir, "prompts");
   fs.mkdirSync(promptsDir, { recursive: true });
   fs.writeFileSync(path.join(promptsDir, "skill.md"), assembled.skill);
@@ -149,9 +159,19 @@ export function prepareSession(db, cfg, skillDir, opts = {}) {
     }
   }
 
-  // 3. Lay out cell dirs. Skill cells get a per-cell ./skill/ copy (in their cwd);
-  //    control cells get none — isolation is structural, no --add-dir, no leak. A control cell is
-  //    omitted entirely for a model whose control is reused from the cached baseline.
+  // Fail fast if eval.md declares an input that isn't in eval/ (before laying out any cells).
+  for (const rel of evalSpec.inputs || []) {
+    if (!fs.existsSync(path.join(evalSnapshot, rel))) {
+      throw new Error(`eval.md declares input "${rel}" but eval/${rel} does not exist`);
+    }
+  }
+
+  // 3. Lay out cell dirs. Skill cells get a per-cell ./skill/ copy (in their cwd); control cells get
+  //    none — isolation is structural, no --add-dir, no leak. Every cell (skill AND control) also
+  //    gets the declared input files in its cwd, so the only structural difference between the two
+  //    conditions stays the skill doc. The model reads inputs from disk; the answer key (truth files
+  //    in eval/) is never copied to a cell. A control cell is omitted entirely for a model whose
+  //    control is reused from the cached baseline.
   const all = cellList(cfg).filter((c) => c.condition !== "control" || !reuseModels.has(c.model));
   const cellsDir = path.join(sessionDir, "cells");
   for (const c of all) {
@@ -160,6 +180,11 @@ export function prepareSession(db, cfg, skillDir, opts = {}) {
     c.dirPath = cellDir;
     c.promptFile = path.join(promptsDir, `${c.condition}.md`);
     if (c.condition === "skill") copyTree(snapshotDir, path.join(cellDir, "skill"));
+    for (const rel of evalSpec.inputs || []) {
+      const dest = path.join(cellDir, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(path.join(evalSnapshot, rel), dest);
+    }
   }
 
   // 4. DB: session(running) + seed 6N pending cells.

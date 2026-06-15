@@ -287,6 +287,39 @@ class Db {
     return this.regimeBaseline(evalHash, model, opts) != null;
   }
 
+  // The run defaults for a skill, derived from its most recent control-bearing (baseline) session:
+  // the models it measured and the replicate count. These ARE the models + replicates chosen when
+  // that baseline was initialized, so a later session reuses them automatically (no separate store).
+  // A skill-only reuse session has no control cells, so it never becomes "the baseline" here — which
+  // is exactly why a quick narrow/quick reuse run can't redefine the standing default. Returns null
+  // when the skill has never measured a control baseline (→ fall back to config.json).
+  baselineDefaults(skillName) {
+    const s = this.db
+      .prepare(
+        `SELECT s.id, s.started_at
+           FROM sessions s
+          WHERE s.skill_name = ? AND s.status = 'complete'
+            AND EXISTS (SELECT 1 FROM cell_metrics cm
+                         WHERE cm.session_id = s.id AND cm.condition = 'control')
+          ORDER BY s.started_at DESC
+          LIMIT 1`
+      )
+      .get(skillName);
+    if (!s) return null;
+    const models = this.db
+      .prepare(`SELECT DISTINCT model FROM cell_metrics WHERE session_id = ? AND condition = 'control'`)
+      .all(s.id)
+      .map((r) => r.model);
+    // Replicates were seeded uniformly from matrix.replicates, so the distinct replicate count of
+    // the control cells is the chosen N — counted over seeded rows (any status), so a crashed
+    // control cell doesn't undercount the intended replicates.
+    const { n } = this.db
+      .prepare(`SELECT COUNT(DISTINCT replicate) AS n FROM cell_metrics WHERE session_id = ? AND condition = 'control'`)
+      .get(s.id);
+    if (!models.length || !(n >= 1)) return null;
+    return { models, replicates: n, sessionId: s.id, startedAt: s.started_at };
+  }
+
   // The latest complete session's apparatus for a skill (eval_hash + the models it measured) —
   // used to detect a regime change ("tests/model changed") before launching a new session.
   latestRegimeInfo(skillName) {

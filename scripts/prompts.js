@@ -100,15 +100,19 @@ export function parseEvalMd(evalMdPath) {
   return spec;
 }
 
-function buildTaskBlock(evalDir, spec) {
+function buildTaskBlock(spec) {
   const out = [`# Task\n\n${spec.prompt}\n`];
 
   if (spec.inputs.length) {
-    out.push(`\n## Input files\n`);
-    for (const rel of spec.inputs) {
-      const content = fs.readFileSync(path.join(evalDir, rel), "utf-8").replace(/\s+$/, "");
-      out.push(`\n\`${rel}\`:\n\n\`\`\`\n${content}\n\`\`\`\n`);
-    }
+    // Inputs are delivered as real files in the cell's cwd (session.js), not inlined — the author
+    // decides what's a file (eval.md `inputs`) vs what's prose (the `## Prompt`). The prompt only
+    // names them, so a large fixture doesn't bloat the prompt or get framed as pasted text.
+    const list = spec.inputs.map((f) => "`" + f + "`").join(", ");
+    const one = spec.inputs.length === 1;
+    out.push(
+      `\n## Input files\n\nThe input ${one ? "file is" : "files are"} in your current working ` +
+        `directory — read ${one ? "it" : "them"} as needed: ${list}.\n`
+    );
   }
 
   if (spec.required.length || spec.elements.length) {
@@ -131,12 +135,13 @@ function buildTaskBlock(evalDir, spec) {
   return out.join("");
 }
 
-// Returns { skill, control } prompt texts. `skillDir` and `evalDir` are passed explicitly so
-// the caller can point them at the immutable per-session snapshots (skill/ and eval/) rather
-// than the live source — guaranteeing the kept prompts can't drift from what actually graded.
-export function assemblePrompts({ skillDir, evalDir, evalSpec, promptOverride }) {
+// Returns { skill, control } prompt texts. `skillDir` is passed explicitly so the caller can point
+// it at the immutable per-session skill/ snapshot rather than the live source — guaranteeing the
+// kept prompts can't drift from what actually graded. (Input files are delivered to each cell's
+// cwd by session.js; the prompt only names them, so it no longer reads the eval/ dir.)
+export function assemblePrompts({ skillDir, evalSpec, promptOverride }) {
   const spec = promptOverride ? { ...evalSpec, prompt: promptOverride } : evalSpec;
-  const task = buildTaskBlock(evalDir, spec);
+  const task = buildTaskBlock(spec);
 
   const control = `${task}\n`;
   const skill =

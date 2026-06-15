@@ -45,7 +45,7 @@ nav { position: sticky; top: 0; z-index: 10; background: var(--bg); border-botto
 
 main { margin: 0 auto; padding: 2rem 3rem 3rem; max-width: 1400px; }
 h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: .4rem; }
-/* in-page divider between sections that share one page (e.g. Instance: summary + grid) */
+/* in-page divider between sections that share one page (e.g. Report: summary + grid) */
 .section-head { font-size: 1.25rem; font-weight: 700; margin: 2.5rem 0 1rem; padding-top: 2.5rem; border-top: 1px solid var(--line-soft); }
 /* first head (Comparison) sits right under the page intro — no divider, tighter top */
 .section-head:first-of-type { margin-top: .5rem; padding-top: 0; border-top: none; }
@@ -54,7 +54,7 @@ h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: .4rem; }
 .page.active { display: block; }
 .empty { color: var(--dim); padding: 2rem 0; }
 
-/* selector chips (sessions / instances) */
+/* selector chips (sessions) */
 .selector { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1.75rem; }
 .selector:empty { display: none; }
 .chip { background: var(--panel); color: var(--muted); border: 1px solid transparent; border-radius: .5rem; padding: .55rem 1.1rem; cursor: pointer; font-size: 1rem; transition: all .15s; }
@@ -69,7 +69,7 @@ h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: .4rem; }
 .banner-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .banner-info { min-width: 0; }
 
-/* Instance session-picker popup (anchored on the right of the banner) */
+/* Report session-picker popup (anchored on the right of the banner) */
 .sess-pick { position: relative; flex: none; }
 .sess-btn { display: inline-flex; align-items: center; gap: .4rem; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: .45rem; padding: .4rem .8rem; cursor: pointer; font-size: .9rem; white-space: nowrap; }
 .sess-btn:hover { border-color: #475569; }
@@ -101,7 +101,6 @@ h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: .4rem; }
 .bar-group:last-child { margin-bottom: 0; }
 .bar-model-label { font-size: .9rem; color: var(--muted); margin-bottom: .5rem; text-transform: uppercase; letter-spacing: .04em; }
 .bar-row { display: flex; align-items: center; gap: .75rem; margin-bottom: 7px; }
-.bar-cond { width: 3.6rem; font-size: .82rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .bar-track { flex: 1; min-width: 0; position: relative; height: 30px; background: rgba(51,65,85,.28); border-radius: 5px; }
 .bar { position: absolute; left: 0; top: 0; height: 100%; border-radius: 5px; min-width: 3px; transition: width .3s; }
 .bar-skill { background: var(--skill); }
@@ -120,7 +119,7 @@ h2 { font-size: 1.6rem; font-weight: 700; margin-bottom: .4rem; }
 /* token columns (cost / effort) */
 .token-cols { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 1.75rem; }
 
-/* generic data table (comparison matrix / cost-effort / instance grid) */
+/* generic data table (comparison matrix / cost-effort / per-test grid) */
 table { width: 100%; border-collapse: collapse; font-size: 1rem; background: var(--panel); border-radius: .6rem; overflow: hidden; }
 th, td { padding: .65rem .9rem; text-align: center; border-bottom: 1px solid var(--line-soft); }
 th { background: var(--panel); color: var(--muted); font-weight: 600; }
@@ -129,11 +128,11 @@ td.rowhead, th.rowhead { text-align: left; color: #cbd5e1; max-width: 380px; ove
 tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .score-cell { font-weight: 700; }
 .totals td { border-top: 2px solid var(--line); font-weight: 600; }
-/* per-test grid (#instance-body): vertical column dividers between every column */
-#instance-body th, #instance-body td { border-right: 1px solid var(--line); }
-#instance-body th:last-child, #instance-body td:last-child { border-right: none; }
+/* per-test grid (#pertest-body): vertical column dividers between every column */
+#pertest-body th, #pertest-body td { border-right: 1px solid var(--line); }
+#pertest-body th:last-child, #pertest-body td:last-child { border-right: none; }
 /* horizontal divider under the skill/control header row */
-#instance-body .condrow th { border-bottom: 2px solid var(--line); }
+#pertest-body .condrow th { border-bottom: 2px solid var(--line); }
 
 /* per-column run badge in the grid header */
 .run-badge-wrap { margin-left: .4rem; white-space: nowrap; }
@@ -195,9 +194,10 @@ tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .chart-main { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; }
 #chart-area { flex: 1; min-height: 0; }
 
-/* header line: title centered, zoom tools on the right of the same line */
-.chart-header { position: relative; flex: none; min-height: 2rem; padding: .35rem 3rem .25rem; }
-.chart-toolbar { position: absolute; right: .5rem; top: 50%; transform: translateY(-50%); display: flex; gap: .3rem; }
+/* header line: back button (left), title centered, zoom tools on the right — all on one line */
+.chart-header { display: flex; align-items: center; gap: .6rem; flex: none; min-height: 2rem; padding: .35rem .6rem .25rem; }
+.chart-back { flex: none; }
+.chart-toolbar { flex: none; display: flex; gap: .3rem; }
 .chart-toolbar button { width: 30px; height: 30px; display: grid; place-items: center; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: .4rem; cursor: pointer; font-size: 1.05rem; line-height: 1; }
 .chart-toolbar button:hover { border-color: #475569; background: var(--panel); }
 
@@ -223,6 +223,13 @@ tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .dd-opt { display: flex; align-items: center; gap: .5rem; padding: .32rem .45rem; border-radius: .35rem; cursor: pointer; font-size: .88rem; color: var(--muted); }
 .dd-opt:hover { background: var(--panel); color: var(--text); }
 .dd-opt input { accent-color: var(--run); margin: 0; }
+/* segmented toggle (matches .dd-btn chrome, all options inline) */
+.seg { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: .45rem; overflow: hidden; }
+.seg-btn { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: none; border: none; font-family: inherit; font-size: .9rem; color: var(--muted); padding: .42rem .4rem; cursor: pointer; transition: background .12s, color .12s; }
+.seg-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seg-btn:not(:last-child) { border-right: 1px solid var(--line); }
+.seg-btn:hover { color: var(--text); }
+.seg-btn.active { background: var(--panel-2); color: var(--text); font-weight: 600; }
 
 /* legacy chip controls (unused; kept harmless) */
 #chart-controls { display: block; }
@@ -237,11 +244,13 @@ tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .ctl-chips > .ctl-cat:first-child { margin-left: 0; }
 
 /* iteration chart */
-.chart-caption { color: var(--text); font-weight: 700; font-size: 1.2rem; text-align: center; margin: 0; }
+.chart-caption { flex: 1 1 auto; min-width: 0; color: var(--text); font-weight: 700; font-size: 1.2rem; text-align: center; margin: 0; }
+.cap-detail { font-weight: 400; font-size: .72rem; color: var(--dim); }
+.cap-detail code { font-family: "Cascadia Code", "Consolas", monospace; color: var(--muted); }
 .iter-chart { display: block; width: 100%; height: 100%; touch-action: none; }
 .iter-chart.panning { cursor: grabbing; }
-.iter-chart .pt { cursor: pointer; }
-.iter-chart .pt:hover { fill: rgba(255,255,255,.18); stroke: #fff; stroke-width: 1; }
+/* highlight is driven by JS (nearest point), not :hover, so adjacent points resolve to the closest one */
+.iter-chart .pt.hov { fill: rgba(255,255,255,.18); stroke: #fff; stroke-width: 1; }
 .iter-chart .pt.sel { fill: rgba(255,255,255,.14); stroke: #fff; stroke-width: 2.5; }
 .iter-chart .grid { stroke: var(--line-soft); stroke-width: 1; }
 .iter-chart .gridx { opacity: .55; }
@@ -268,19 +277,52 @@ tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .rg-back { background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); border-radius: .35rem; padding: .1rem .5rem; margin-right: .4rem; cursor: pointer; font-size: .78rem; }
 .rg-back:hover { background: var(--panel); color: var(--text); }
 .leg-note { color: var(--dim); font-size: .76rem; margin-top: .3rem; }
-#chart-legend { display: flex; flex-direction: column; gap: .35rem; max-height: 32vh; overflow: auto; }
+#chart-legend { display: flex; flex-direction: column; gap: .3rem; max-height: 42vh; overflow: auto; }
+.leg-h { color: var(--dim); font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; margin: .55rem 0 .05rem; }
+.leg-h:first-child { margin-top: 0; }
 .leg-item { display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .82rem; }
-.leg-item svg { flex: none; }
-/* metric scatter: a small plot card + a compact controls/legend card beside it (bar-chart style) */
-.scatter-graph { flex: 0 1 540px; min-width: 300px; position: relative; }
-.scatter-side { flex: 0 1 250px; min-width: 210px; }
+.leg-item svg, .leg-sw { flex: none; }
+/* metric scatter: a large plot card taking half the row + a controls/legend card beside it */
+.scatter-graph { flex: 0 1 50%; min-width: 320px; position: relative; }
+/* Visualize card: grows to absorb the remaining ~half the graph leaves to its right */
+.scatter-vis { flex: 1 1 340px; min-width: 280px; align-self: flex-start; }
+/* controls as a 2-column grid, column-major: x/y down the left, condition + models on the right */
+.scatter-ctl-row { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(2, auto); grid-auto-flow: column; gap: .7rem 1rem; align-items: start; }
+.scatter-ctl-row .dd, .scatter-models-cell { min-width: 0; margin-bottom: 0; }
+.scatter-vis .leg-list { flex-direction: row; flex-wrap: wrap; gap: .4rem .5rem; }
+.scatter-vis .leg-toggle { width: auto; }
+/* models sits in the right column under condition — its label tight to the chips, no extra top gap */
+.scatter-models-cell .scatter-models-h { margin-top: 0; margin-bottom: .45rem; }
+/* analysis: its own section in the same card, set off from Visualize by a divider rule */
+.scatter-section-h { margin-top: 1.3rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+/* analysis controls as a 2-column grid: zoom on the left, clusters on the right */
+#scatter-analysis-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem 1rem; align-items: start; }
+#scatter-analysis-controls .dd { margin-bottom: 0; }
+/* cluster colour/dash key — sits below the controls row, only present when a cluster mode is active */
+.cluster-leg:not(:empty) { margin-top: .85rem; }
+.cl-leg-h { margin-bottom: .4rem; }
+.cl-leg-list { display: flex; flex-wrap: wrap; gap: .3rem .8rem; }
+.cl-leg-item { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); font-size: .82rem; }
+.cl-swatch { flex: none; overflow: visible; }
 .scatter-graph .chart-title { margin-bottom: .9rem; }
 #scatter-area .iter-chart { background: var(--bg); border-radius: .5rem; }
-#scatter-area .iter-chart circle.dot { cursor: pointer; transition: fill-opacity .1s ease, stroke-width .1s ease, r .1s ease; }
-#scatter-area .iter-chart circle.dot:hover { fill-opacity: 1; stroke-width: 2.5; r: 7.5; }
+#scatter-area .iter-chart .dot { cursor: pointer; transition: fill-opacity .1s ease, stroke-width .1s ease, r .1s ease; }
+#scatter-area .iter-chart .dot:hover { fill-opacity: 1; stroke-width: 2.5; }
+#scatter-area .iter-chart circle.dot:hover { r: 7.5; } /* circles can grow; other shapes just brighten */
+/* cluster overlay (analysis card): hull outlines never swallow dot-hover events; the centroid X is
+   hoverable (transparent hit-disc) so it can surface its own info card */
+#scatter-area .iter-chart .cluster-hull { pointer-events: none; }
+#scatter-area .iter-chart .cluster-x { pointer-events: auto; }
 #scatter-tip { pointer-events: none; max-width: 230px; }
+.leg-mark { flex: none; overflow: visible; }
+.hd-note { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--dim); margin-left: .35rem; }
 .leg-list { display: flex; flex-direction: column; gap: .35rem; }
-.leg-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+/* models list = toggle buttons (chips): click to hide/show a model's points (and rescale the axes) */
+.leg-toggle { width: 100%; background: var(--bg); border: 1px solid var(--line); font-family: inherit; padding: .32rem .5rem; border-radius: .4rem; cursor: pointer; transition: background .12s, border-color .12s, opacity .12s; }
+.leg-toggle:hover { background: var(--panel-2); border-color: #475569; color: var(--text); }
+.leg-toggle:active { transform: translateY(1px); }
+.leg-toggle.off { opacity: .5; border-style: dashed; }
+.leg-toggle.off span { text-decoration: line-through; }
 
 /* hover tooltip */
 .chart-tip { position: absolute; z-index: 40; pointer-events: auto; background: #0b1220; border: 1px solid var(--line); border-radius: .5rem; padding: .55rem .65rem; font-size: .78rem; color: var(--text); max-width: 260px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
@@ -293,6 +335,8 @@ tr:nth-child(even) td { background: rgba(30,41,59,.45); }
 .tip-mval { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tip-sub { color: var(--muted); font-size: .72rem; margin-top: .25rem; }
 .tip-vals { color: #cbd5e1; font-family: "Cascadia Code", "Consolas", monospace; font-size: .72rem; line-height: 1.5; margin-top: .1rem; max-height: 150px; overflow-y: auto; }
+.tip-val.used { color: var(--text); }
+.tip-val.unused { color: var(--dim); opacity: .55; }
 .tip-open { margin-top: .55rem; width: 100%; background: var(--run); color: #fff; border: none; border-radius: .35rem; padding: .4rem .5rem; cursor: pointer; font-size: .76rem; font-weight: 600; }
 .tip-open:hover { filter: brightness(1.1); }
 

@@ -126,14 +126,31 @@ export function baselineMaxAgeIso(cfg, now = new Date()) {
   return new Date(now.getTime() - hours * 3600_000).toISOString();
 }
 
-// Build an effective config with per-run overrides applied (e.g. --replicates). Returns a new
-// frozen object; the loaded config stays immutable. Throws on an invalid override.
-export function withOverrides(cfg, { replicates } = {}) {
-  if (replicates == null) return cfg;
-  if (!Number.isInteger(replicates) || replicates < 1) {
-    throw new Error(`--replicates must be an integer >= 1 (got ${replicates})`);
+// Build an effective config with per-run overrides applied (--models / --replicates, or the
+// persisted per-skill defaults). Returns a new frozen object; the loaded config stays immutable.
+// `models` selects a SUBSET of the configured matrix (so pricing always exists); the selection is
+// returned in config display order. Throws on an invalid override.
+export function withOverrides(cfg, { replicates, models } = {}) {
+  let matrix = cfg.matrix;
+  if (models != null) {
+    if (!Array.isArray(models) || models.length === 0) {
+      throw new Error(`--models must name at least one model`);
+    }
+    const unknown = models.filter((m) => !cfg.matrix.models.includes(m));
+    if (unknown.length) {
+      throw new Error(`--models: unknown model(s) ${unknown.join(", ")} (not in config matrix.models / pricing)`);
+    }
+    const selected = cfg.matrix.models.filter((m) => models.includes(m)); // de-dup + display order
+    matrix = { ...matrix, models: selected };
   }
-  return Object.freeze({ ...cfg, matrix: Object.freeze({ ...cfg.matrix, replicates }) });
+  if (replicates != null) {
+    if (!Number.isInteger(replicates) || replicates < 1) {
+      throw new Error(`--replicates must be an integer >= 1 (got ${replicates})`);
+    }
+    matrix = { ...matrix, replicates };
+  }
+  if (matrix === cfg.matrix) return cfg;
+  return Object.freeze({ ...cfg, matrix: Object.freeze(matrix) });
 }
 
 // Inverse of cellDirName: "<model>__<condition>__<replicate>" → {model, condition, replicate}.
