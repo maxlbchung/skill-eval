@@ -1,7 +1,8 @@
-// The one web app's server (design §10). Serves the static single-page app from
-// webpages/ plus a small JSON API. Two data sources, by design: /api/live reads the
-// ephemeral in-memory channel (current run only); the rest query the DB. Runs in-process
-// during a session (startSession) or standalone for browsing history (node server.js).
+// The one web app's server (design §10). Serves the static single-page app from webpages/ plus a
+// small JSON API. Everything — including live state — is now derived from files + the DB, so ONE
+// long-lived server shows every concurrent run and all history. /api/live(/:id) projects the live
+// view from each session's stream.jsonl + .pid marker; the rest query the DB. Started by the first
+// `run.js` (and reused by later concurrent runs), or standalone via `node server.js`.
 
 import http from "node:http";
 import fs from "node:fs";
@@ -9,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig, DB_PATH, DEFAULT_CONFIG_PATH, SESSIONS_DIR, cellDirName, replicateWidth } from "./config.js";
 import { openDb } from "./db.js";
-import { createLiveChannel } from "./live.js";
+import { liveSessions, liveSnapshot } from "./live.js";
 import { sessionRollup, overTime } from "./metrics.js";
 import { reconcileAbandoned } from "./reindex.js";
 
@@ -21,8 +22,6 @@ const MIME = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
 };
-
-let currentLive = null; // set while a session is running
 
 function sendJson(res, status, body) {
   const text = JSON.stringify(body);
@@ -108,8 +107,18 @@ async function handle(req, res, db, cfg) {
   const p = decodeURIComponent(url.pathname);
 
   try {
+    if (p === "/api/health") {
+      // run.js probes this to decide whether to reuse an already-running server.
+      return sendJson(res, 200, { ok: true, service: "skill-eval" });
+    }
     if (p === "/api/live") {
-      return sendJson(res, 200, currentLive ? await currentLive.snapshot() : { sessionId: null, cells: [] });
+      // the sessions running right now (file-derived) — the Live tab's run-picker list.
+      return sendJson(res, 200, { sessions: liveSessions(db) });
+    }
+    const liveMatch = p.match(/^\/api\/live\/(.+)$/);
+    if (liveMatch) {
+      const snap = await liveSnapshot(db, cfg, liveMatch[1]); // p is already decoded
+      return snap ? sendJson(res, 200, snap) : sendJson(res, 404, { error: "no such session" });
     }
     if (p === "/api/sessions") {
       return sendJson(res, 200, db.listSessions());
@@ -177,19 +186,12 @@ function listenWithFallback(server, startPort, maxTries = 64) {
   });
 }
 
-// Returns { server, port }. port may differ from cfg.port if it was busy.
+// Returns { server, port }. port may differ from cfg.port if it was busy. One server now serves
+// every session — live (file-derived) and historical — so there's no per-session server to start.
 export async function startServer(db, cfg) {
   const server = http.createServer((req, res) => handle(req, res, db, cfg));
   const port = await listenWithFallback(server, cfg.port);
   return { server, port };
-}
-
-// Wire a running session's live channel + start the server. Returns { live, server, port }.
-export async function startSession(db, session, cfg) {
-  const live = createLiveChannel(session);
-  const { server, port } = await startServer(db, cfg);
-  currentLive = live; // expose live state only once the server is actually bound
-  return { live, server, port };
 }
 
 // Standalone: serve history over a DB (default index.db; --db <path> to override).

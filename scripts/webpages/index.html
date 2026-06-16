@@ -14,7 +14,7 @@
   </div>
   <div class="nav-links">
     <button class="nav-btn" data-tab="live">Live</button>
-    <button class="nav-btn" data-tab="instance">Instance</button>
+    <button class="nav-btn" data-tab="report">Report</button>
     <button class="nav-btn" data-tab="history">History</button>
   </div>
   <div class="nav-meta" id="nav-meta"></div>
@@ -27,13 +27,14 @@
     <div class="status-strip idle" id="live-strip">
       <div><strong id="live-title">No active session</strong><span id="live-detail"></span></div>
     </div>
+    <div id="live-runs" class="selector"></div>
     <div id="live-board"></div>
   </section>
 
-  <section class="page" id="instance">
-    <h2>Instance</h2>
-    <div class="subtitle">A single session end to end: the skill-vs-control summary, then the per-test breakdown behind it.</div>
-    <div id="instance-banner"></div>
+  <section class="page" id="report">
+    <h2>Report</h2>
+    <div class="subtitle">One eval run, end to end: the skill-vs-control summary, then the per-test breakdown behind it.</div>
+    <div id="report-banner"></div>
 
     <h3 class="section-head">Comparison</h3>
     <div class="subtitle" id="comparison-sub">skill vs control — mean score across replicates, with cost &amp; steps.</div>
@@ -41,7 +42,7 @@
 
     <h3 class="section-head">Per-test scores</h3>
     <div class="subtitle">Every test × every (model, condition) cell (mean across replicates).</div>
-    <div id="instance-body"><div class="empty">Loading…</div></div>
+    <div id="pertest-body"><div class="empty">Loading…</div></div>
 
     <h3 class="section-head">Metric scatter</h3>
     <div class="subtitle">Each point is one run (model × condition × replicate). Pick a metric for each axis on the right.</div>

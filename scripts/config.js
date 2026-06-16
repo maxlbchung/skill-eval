@@ -47,6 +47,11 @@ export function validateConfig(cfg) {
   for (const k of ["maxTurns", "concurrency", "port", "schemaVersion"]) {
     if (!Number.isInteger(cfg[k]) || cfg[k] < 1) fail(`${k} must be a positive integer`);
   }
+  // Optional: headless freshness window for baseline reuse (Issue 3). A cached control older
+  // than this auto-refreshes when run non-interactively. Default lives in baselineMaxAgeIso().
+  if (cfg.baselineMaxAgeHours != null && (typeof cfg.baselineMaxAgeHours !== "number" || !(cfg.baselineMaxAgeHours > 0))) {
+    fail("baselineMaxAgeHours must be a positive number");
+  }
   return cfg;
 }
 
@@ -93,6 +98,59 @@ export function cells(cfg) {
 
 export function cellCount(cfg) {
   return cfg.matrix.models.length * cfg.matrix.conditions.length * cfg.matrix.replicates;
+}
+
+// Generated/scratch files that must never affect eval_hash or land in the eval/ snapshot.
+// Hashing WITH this exclude (not just filtering at copy time) keeps eval_hash stable even if
+// e.g. Python's __pycache__ later appears inside the kept snapshot (the grader runs from there).
+export const EVAL_EXCLUDE = new Set(["__pycache__", ".DS_Store", "Thumbs.db"]);
+const EVAL_EXCLUDE_EXT = new Set([".pyc", ".pyo"]);
+
+// True if a relative path (given as its path segments) is a generated/scratch artifact that
+// should be excluded from the eval/ snapshot + hash. `extraNames` adds the runner's declared
+// output names (e.g. a stray result.json) so a leftover grader output can't perturb the hash.
+export function isEvalExcluded(relParts, extraNames = null) {
+  if (relParts.some((p) => EVAL_EXCLUDE.has(p))) return true;
+  const base = relParts[relParts.length - 1];
+  if (EVAL_EXCLUDE_EXT.has(path.extname(base).toLowerCase())) return true;
+  if (extraNames && extraNames.has(base)) return true;
+  return false;
+}
+
+// Headless freshness window for baseline reuse (Issue 3): the oldest started_at a cached
+// control may have and still be reused without an interactive refresh. The agent's day-boundary
+// AskUserQuestion (Issue 4) is the human-facing trigger; this is the non-interactive fallback.
+export const DEFAULT_BASELINE_MAX_AGE_HOURS = 24;
+export function baselineMaxAgeIso(cfg, now = new Date()) {
+  const hours = cfg.baselineMaxAgeHours ?? DEFAULT_BASELINE_MAX_AGE_HOURS;
+  return new Date(now.getTime() - hours * 3600_000).toISOString();
+}
+
+// Build an effective config with per-run overrides applied (--models / --replicates, or the
+// persisted per-skill defaults). Returns a new frozen object; the loaded config stays immutable.
+// `models` selects a SUBSET of the configured matrix (so pricing always exists); the selection is
+// returned in config display order. Throws on an invalid override.
+export function withOverrides(cfg, { replicates, models } = {}) {
+  let matrix = cfg.matrix;
+  if (models != null) {
+    if (!Array.isArray(models) || models.length === 0) {
+      throw new Error(`--models must name at least one model`);
+    }
+    const unknown = models.filter((m) => !cfg.matrix.models.includes(m));
+    if (unknown.length) {
+      throw new Error(`--models: unknown model(s) ${unknown.join(", ")} (not in config matrix.models / pricing)`);
+    }
+    const selected = cfg.matrix.models.filter((m) => models.includes(m)); // de-dup + display order
+    matrix = { ...matrix, models: selected };
+  }
+  if (replicates != null) {
+    if (!Number.isInteger(replicates) || replicates < 1) {
+      throw new Error(`--replicates must be an integer >= 1 (got ${replicates})`);
+    }
+    matrix = { ...matrix, replicates };
+  }
+  if (matrix === cfg.matrix) return cfg;
+  return Object.freeze({ ...cfg, matrix: Object.freeze(matrix) });
 }
 
 // Inverse of cellDirName: "<model>__<condition>__<replicate>" → {model, condition, replicate}.

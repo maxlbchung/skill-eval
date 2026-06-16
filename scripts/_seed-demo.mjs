@@ -1,7 +1,7 @@
 // Dev helper: seed data/demo.db with synthetic multi-iteration data so the History
 // "metrics over iterations" chart can be explored without running real evals.
 // Also seeds a few FAILED runs with on-disk error logs (stderr.log / eval.log / .failed),
-// so the Instance run-status filter and the Error-logs section have something to show.
+// so the Report run-status filter and the Error-logs section have something to show.
 //   node scripts/_seed-demo.mjs   then:   node scripts/server.js --db data/demo.db
 import fs from "node:fs";
 import path from "node:path";
